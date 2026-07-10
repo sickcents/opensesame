@@ -1,2 +1,4 @@
 # Ralph loop progress log
-# Format: [ID] [Title] - DONE | FAILED (reason)
+# Format: [ID] [Title] - DONE | FAILED (reason) | BLOCKED (reason)
+
+[1] Project scaffold — Next.js + Neon Postgres/PostGIS, base schema - BLOCKED (code merged to main; Neon marketplace terms need manual acceptance in browser before `vercel integration add neon` can finish — see issue #1 comment for the exact URL and resume commands)
