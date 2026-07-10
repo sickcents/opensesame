@@ -14,3 +14,13 @@ out/
 # OS
 .DS_Store
 Thumbs.db
+.vercel
+.env*
+
+# TypeScript
+*.tsbuildinfo
+next-env.d.ts
+
+# local verification artifacts
+.playwright-mcp/
+/*.png
