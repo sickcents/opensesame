@@ -1,0 +1,3 @@
+# Single Vercel deployment for web app and PDF extraction
+
+We're deploying the Spatial Wayfinding System as one Next.js project on Vercel, rather than splitting the PDF/SVG extraction step into a separately-hosted Python service. Vercel Functions support Python natively via Fluid Compute, so the `pypdf`-based extraction step runs as a Python function within the same project. Considered a split architecture (Next.js frontend + self-hosted FastAPI service on Cloud Run/Fly.io) for more control over long-running processing, but rejected it to avoid managing a second deployment target — revisit if extraction jobs regularly approach the 300s Vercel function timeout.

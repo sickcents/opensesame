@@ -1,0 +1,15 @@
+/ralph-loop:ralph-loop 
+
+Objective: Sequentially resolve Git repository issues using isolated branches and strict progress tracking.
+
+Execution Workflow:
+1. Scan: Read open repository issues and the current state of @progress.txt.
+2. Isolate: Select the first 'PENDING' issue. Create a new branch named `fix/issue-[ID]`.
+3. Fix: Apply code corrections for that single issue only.
+4. Verify: Run local tests/builds. Do not proceed if tests fail.
+5. Log: Update @progress.txt using this format: "[ID] [Title] - DONE". Commit changes and merge to main.
+6. Loop: Repeat the process for the next 'PENDING' issue.
+
+Fallback Rules:
+- If a fix fails tests and cannot be resolved in 3 attempts, rollback changes, update @progress.txt to "[ID] [Title] - FAILED (Reason)", and move to the next issue.
+- Never work on multiple issues simultaneously.

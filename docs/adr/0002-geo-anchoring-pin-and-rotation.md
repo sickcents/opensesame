@@ -1,0 +1,3 @@
+# Geo-anchor facilities with a single pin + rotation, not multi-point georeferencing
+
+Facilities are placed on the real-world map (Leaflet/OSM) with a single lat/lng pin plus a rotation angle, set once during Facility creation, right after Scale Calibration. We rejected full multi-point GIS-style georeferencing (as used in tools like QGIS) because Scale Calibration already fixes the Floor Plan's size and shape — placing an already-rigid, already-scaled shape only needs a position and an orientation, not multiple control points. Revisit if facilities turn out to be non-rectangular/irregular in a way that makes single-point placement visibly wrong on the satellite layer.

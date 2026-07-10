@@ -1,0 +1,3 @@
+# No authentication in this build
+
+The app has no login — anyone with the URL has full access to the single seeded Organization, and Issue reports/resolutions are attributed by a free-text name field the reporter types in, not a real user identity. We designed the data model as if auth existed (Organization as tenant boundary, Editor/Member Roles on Users) specifically so that adding real authentication later is a matter of gating existing actions behind login, not retrofitting the multi-tenant/permission model from scratch. Revisit before any real (non-demo) deployment — free-text attribution and unenforced roles are not appropriate once the data is real.

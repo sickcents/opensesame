@@ -1,0 +1,16 @@
+.claude/ralph-loop.local.md
+.claude/settings.local.json
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+.vercel/
+
+# Env
+.env
+.env*.local
+
+# OS
+.DS_Store
+Thumbs.db

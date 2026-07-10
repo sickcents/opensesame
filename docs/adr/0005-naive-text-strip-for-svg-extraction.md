@@ -1,0 +1,3 @@
+# Naive text-strip for Floor Plan SVG extraction, no line-type filtering
+
+Floor Plan extraction keeps every vector path from the uploaded PDF unchanged and only removes text-drawing operations — it does not attempt to classify lines as walls vs. furniture vs. dimension lines vs. hatching. We considered filtering down to "structural lines only" for a cleaner result, but rejected it: there's no reliable way to infer line intent from arbitrary architect-exported PDFs across different CAD tools, making it a research problem rather than a v1 feature. If extracted plans are too visually cluttered in practice, the fallback is a manual layer-toggle in the editor, not smarter extraction.
