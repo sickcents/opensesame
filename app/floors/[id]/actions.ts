@@ -14,6 +14,12 @@ const SAFETY_EQUIPMENT_KINDS = [
 ] as const;
 export type SafetyEquipmentKind = (typeof SAFETY_EQUIPMENT_KINDS)[number];
 
+const ISSUE_SUBJECT_TYPES = ["room", "area", "equipment", "safety_equipment"] as const;
+export type IssueSubjectType = (typeof ISSUE_SUBJECT_TYPES)[number];
+
+const DEPARTMENTS = ["IT", "Facilities", "Safety", "Security", "Operations"] as const;
+export type Department = (typeof DEPARTMENTS)[number];
+
 export async function setScaleCalibration(
   floorId: string,
   svgDistanceUnits: number,
@@ -95,5 +101,43 @@ export async function createSpace(
     `);
   }
 
+  revalidatePath(`/floors/${floorId}`);
+}
+
+export async function reportIssue(
+  floorId: string,
+  subjectType: IssueSubjectType,
+  subjectId: string,
+  reporterName: string,
+  description: string,
+  department: Department,
+) {
+  const trimmedReporter = reporterName.trim();
+  const trimmedDescription = description.trim();
+  if (!trimmedReporter) {
+    throw new Error("Enter your name.");
+  }
+  if (!trimmedDescription) {
+    throw new Error("Describe the issue.");
+  }
+  if (!ISSUE_SUBJECT_TYPES.includes(subjectType)) {
+    throw new Error("Unknown subject type.");
+  }
+  if (!DEPARTMENTS.includes(department)) {
+    throw new Error("Unknown Department.");
+  }
+
+  await db.execute(sql`
+    INSERT INTO issues (subject_type, subject_id, reporter_name, description, department)
+    VALUES (${subjectType}, ${subjectId}, ${trimmedReporter}, ${trimmedDescription}, ${department})
+  `);
+
+  revalidatePath(`/floors/${floorId}`);
+}
+
+export async function resolveIssue(floorId: string, issueId: string) {
+  await db.execute(sql`
+    UPDATE issues SET status = 'resolved', resolved_at = now() WHERE id = ${issueId}
+  `);
   revalidatePath(`/floors/${floorId}`);
 }

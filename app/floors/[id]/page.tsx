@@ -5,6 +5,7 @@ import { db } from "@/db/client";
 import { floors, facilities, equipmentTypes } from "@/db/schema";
 import { wktPolygonToPoints } from "@/lib/wkt";
 import { FloorViewSwitcher } from "./floor-view-switcher";
+import { IssuesPanel } from "./issues-panel";
 
 const VIEWBOX_RE = /viewBox="0 0 ([\d.]+) ([\d.]+)"/;
 
@@ -19,6 +20,16 @@ type EquipmentRow = {
   heightM: number;
 };
 type SafetyEquipmentRow = { id: string; kind: string; x: number; y: number };
+type IssueRow = {
+  id: string;
+  subjectType: string;
+  subjectLabel: string;
+  reporterName: string;
+  description: string;
+  department: string;
+  status: string;
+  createdAt: string;
+};
 
 export default async function FloorPage({
   params,
@@ -43,7 +54,7 @@ export default async function FloorPage({
 
   if (!row) notFound();
 
-  const [allEquipmentTypes, equipmentRows, roomRows, areaRows, safetyRows] =
+  const [allEquipmentTypes, equipmentRows, roomRows, areaRows, safetyRows, issueRows] =
     await Promise.all([
       db.select().from(equipmentTypes),
       db.execute<EquipmentRow>(sql`
@@ -64,6 +75,31 @@ export default async function FloorPage({
         SELECT id, kind, ST_X(geom) as x, ST_Y(geom) as y
         FROM safety_equipment
         WHERE floor_id = ${id}
+      `),
+      db.execute<IssueRow>(sql`
+        SELECT i.id, i.subject_type as "subjectType", r.name as "subjectLabel",
+               i.reporter_name as "reporterName", i.description, i.department, i.status,
+               i.created_at as "createdAt"
+        FROM issues i JOIN rooms r ON i.subject_type = 'room' AND i.subject_id = r.id
+        WHERE r.floor_id = ${id}
+        UNION ALL
+        SELECT i.id, i.subject_type, a.name, i.reporter_name, i.description, i.department,
+               i.status, i.created_at
+        FROM issues i JOIN areas a ON i.subject_type = 'area' AND i.subject_id = a.id
+        WHERE a.floor_id = ${id}
+        UNION ALL
+        SELECT i.id, i.subject_type, t.name, i.reporter_name, i.description, i.department,
+               i.status, i.created_at
+        FROM issues i
+        JOIN equipment e ON i.subject_type = 'equipment' AND i.subject_id = e.id
+        JOIN equipment_types t ON t.id = e.equipment_type_id
+        WHERE e.floor_id = ${id}
+        UNION ALL
+        SELECT i.id, i.subject_type, s.kind::text, i.reporter_name, i.description, i.department,
+               i.status, i.created_at
+        FROM issues i JOIN safety_equipment s ON i.subject_type = 'safety_equipment' AND i.subject_id = s.id
+        WHERE s.floor_id = ${id}
+        ORDER BY "createdAt" DESC
       `),
     ]);
 
@@ -118,23 +154,26 @@ export default async function FloorPage({
         </span>
       </header>
 
-      <div className="flex min-h-[calc(100vh-57px)] items-center justify-center px-6 py-10">
+      <div className="flex min-h-[calc(100vh-57px)] flex-col items-center gap-8 px-6 py-10">
         {row.floorPlanSvg ? (
-          <FloorViewSwitcher
-            floorId={row.floorId}
-            floorName={row.floorName}
-            svgMarkup={row.floorPlanSvg}
-            viewBoxWidth={viewBoxWidth}
-            viewBoxHeight={viewBoxHeight}
-            scaleMetersPerSvgUnit={row.scaleMetersPerSvgUnit}
-            floorWidthM={floorWidthM}
-            floorHeightM={floorHeightM}
-            equipmentTypes={allEquipmentTypes}
-            placedEquipment={placedEquipment}
-            rooms={rooms}
-            areas={areas}
-            safetyEquipment={safetyEquipment}
-          />
+          <>
+            <FloorViewSwitcher
+              floorId={row.floorId}
+              floorName={row.floorName}
+              svgMarkup={row.floorPlanSvg}
+              viewBoxWidth={viewBoxWidth}
+              viewBoxHeight={viewBoxHeight}
+              scaleMetersPerSvgUnit={row.scaleMetersPerSvgUnit}
+              floorWidthM={floorWidthM}
+              floorHeightM={floorHeightM}
+              equipmentTypes={allEquipmentTypes}
+              placedEquipment={placedEquipment}
+              rooms={rooms}
+              areas={areas}
+              safetyEquipment={safetyEquipment}
+            />
+            <IssuesPanel floorId={row.floorId} issues={issueRows} />
+          </>
         ) : (
           <p className="text-sm text-[var(--color-ink-soft)]">
             This Floor has no Floor Plan yet.

@@ -6,7 +6,10 @@ import {
   placeEquipment,
   createSpace,
   placeSafetyEquipment,
+  reportIssue,
   type SafetyEquipmentKind,
+  type IssueSubjectType,
+  type Department,
 } from "./actions";
 
 type Point = { x: number; y: number };
@@ -41,12 +44,16 @@ type SafetyEquipmentItem = {
   yMeters: number;
 };
 
+type ReportTarget = { type: IssueSubjectType; id: string; label: string };
+
 const SAFETY_KINDS: { kind: SafetyEquipmentKind; label: string; code: string }[] = [
   { kind: "exit", label: "Exit", code: "EX" },
   { kind: "fire_extinguisher", label: "Fire Extinguisher", code: "FE" },
   { kind: "first_aid", label: "First Aid", code: "FA" },
   { kind: "emergency_shower", label: "Emergency Shower", code: "ES" },
 ];
+
+const DEPARTMENTS: Department[] = ["IT", "Facilities", "Safety", "Security", "Operations"];
 
 type Mode = "idle" | "calibrate" | "equipment" | "room" | "area" | "safety";
 
@@ -84,6 +91,13 @@ export function FloorPlanCanvas({
   const [spaceName, setSpaceName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  const [reportTarget, setReportTarget] = useState<ReportTarget | null>(null);
+  const [reporterName, setReporterName] = useState("");
+  const [reportDescription, setReportDescription] = useState("");
+  const [department, setDepartment] = useState<Department>("Facilities");
+  const [reportError, setReportError] = useState<string | null>(null);
+  const [isReporting, startReportTransition] = useTransition();
 
   const svgDistance =
     points.length === 2
@@ -144,6 +158,57 @@ export function FloorPlanCanvas({
       if (!p) return;
       setPoints((pts) => [...pts, { x: p.x, y: p.y }]);
     }
+  }
+
+  function openReport(type: IssueSubjectType, id: string, label: string) {
+    setReportTarget({ type, id, label });
+    setReporterName("");
+    setReportDescription("");
+    setDepartment("Facilities");
+    setReportError(null);
+  }
+
+  function closeReport() {
+    setReportTarget(null);
+  }
+
+  function submitReport() {
+    if (!reportTarget) return;
+    if (!reporterName.trim()) {
+      setReportError("Enter your name.");
+      return;
+    }
+    if (!reportDescription.trim()) {
+      setReportError("Describe the issue.");
+      return;
+    }
+    setReportError(null);
+    startReportTransition(async () => {
+      try {
+        await reportIssue(
+          floorId,
+          reportTarget.type,
+          reportTarget.id,
+          reporterName,
+          reportDescription,
+          department,
+        );
+        setReportTarget(null);
+      } catch (err) {
+        setReportError(err instanceof Error ? err.message : "Couldn't submit the report.");
+      }
+    });
+  }
+
+  function subjectClickProps(type: IssueSubjectType, id: string, label: string) {
+    if (mode !== "idle") return {};
+    return {
+      style: { pointerEvents: "auto" as const, cursor: "pointer" },
+      onClick: (e: MouseEvent) => {
+        e.stopPropagation();
+        openReport(type, id, label);
+      },
+    };
   }
 
   function startCalibration() {
@@ -365,6 +430,12 @@ export function FloorPlanCanvas({
       <div className="relative rounded-sm border border-[var(--color-grid)] bg-[var(--color-panel)] p-4 shadow-sm">
         <CornerMarks />
 
+        {mode === "idle" && (
+          <p className="mb-2 font-mono text-xs text-[var(--color-ink-soft)]">
+            Click a Room, Area, Equipment, or Safety Equipment marker to report an issue.
+          </p>
+        )}
+
         <div className="relative">
           <div
             className="[&_svg]:mx-auto [&_svg]:h-auto [&_svg]:max-h-[70vh] [&_svg]:w-full [&_svg_path]:!stroke-[var(--color-ink)]"
@@ -380,7 +451,7 @@ export function FloorPlanCanvas({
             {rooms.map((r) => {
               const { poly, cx, cy } = toSvgPoints(r);
               return (
-                <g key={r.id}>
+                <g key={r.id} {...subjectClickProps("room", r.id, r.name)}>
                   <polygon
                     points={poly}
                     fill="var(--color-ink)"
@@ -405,7 +476,7 @@ export function FloorPlanCanvas({
             {areas.map((a) => {
               const { poly, cx, cy } = toSvgPoints(a);
               return (
-                <g key={a.id}>
+                <g key={a.id} {...subjectClickProps("area", a.id, a.name)}>
                   <polygon
                     points={poly}
                     fill="var(--color-ink-soft)"
@@ -430,7 +501,7 @@ export function FloorPlanCanvas({
             })}
 
             {equipmentRects.map((r) => (
-              <g key={r.id}>
+              <g key={r.id} {...subjectClickProps("equipment", r.id, r.label)}>
                 <rect
                   x={r.x}
                   y={r.y}
@@ -456,7 +527,7 @@ export function FloorPlanCanvas({
             ))}
 
             {safetyMarkers.map((s) => (
-              <g key={s.id}>
+              <g key={s.id} {...subjectClickProps("safety_equipment", s.id, s.label)}>
                 <circle
                   cx={s.cx}
                   cy={s.cy}
@@ -675,6 +746,93 @@ export function FloorPlanCanvas({
           </p>
         )}
       </div>
+
+      {reportTarget && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-[var(--color-ink)]/30 px-6"
+          onClick={closeReport}
+        >
+          <div
+            className="w-full max-w-sm rounded-sm border border-[var(--color-grid)] bg-[var(--color-panel)] p-5 shadow-lg"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="font-[family-name:var(--font-display)] text-base font-medium text-[var(--color-ink)]">
+              Report an issue
+            </h3>
+            <p className="mt-1 font-mono text-xs text-[var(--color-ink-soft)]">
+              {reportTarget.label}
+            </p>
+
+            <div className="mt-4 space-y-3">
+              <div>
+                <label className="block font-mono text-xs uppercase tracking-wide text-[var(--color-ink-soft)]">
+                  Your name
+                </label>
+                <input
+                  type="text"
+                  autoFocus
+                  value={reporterName}
+                  onChange={(e) => setReporterName(e.target.value)}
+                  placeholder="Jordan"
+                  className="mt-1 w-full rounded-sm border border-[var(--color-grid)] bg-[var(--color-paper)] px-2 py-1.5 text-sm text-[var(--color-ink)] focus:border-[var(--color-ink)] focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="block font-mono text-xs uppercase tracking-wide text-[var(--color-ink-soft)]">
+                  What&apos;s wrong
+                </label>
+                <textarea
+                  value={reportDescription}
+                  onChange={(e) => setReportDescription(e.target.value)}
+                  rows={3}
+                  placeholder="Describe the issue"
+                  className="mt-1 w-full rounded-sm border border-[var(--color-grid)] bg-[var(--color-paper)] px-2 py-1.5 text-sm text-[var(--color-ink)] focus:border-[var(--color-ink)] focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="block font-mono text-xs uppercase tracking-wide text-[var(--color-ink-soft)]">
+                  Department
+                </label>
+                <select
+                  value={department}
+                  onChange={(e) => setDepartment(e.target.value as Department)}
+                  className="mt-1 w-full rounded-sm border border-[var(--color-grid)] bg-[var(--color-paper)] px-2 py-1.5 text-sm text-[var(--color-ink)] focus:border-[var(--color-ink)] focus:outline-none"
+                >
+                  {DEPARTMENTS.map((d) => (
+                    <option key={d} value={d}>
+                      {d}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {reportError && (
+                <p role="alert" className="text-sm text-[var(--color-signal)]">
+                  {reportError}
+                </p>
+              )}
+
+              <div className="flex items-center gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={submitReport}
+                  disabled={isReporting}
+                  className="rounded-sm bg-[var(--color-ink)] px-3 py-1.5 font-mono text-xs text-[var(--color-paper)] disabled:opacity-60"
+                >
+                  {isReporting ? "Submitting…" : "Submit report"}
+                </button>
+                <button
+                  type="button"
+                  onClick={closeReport}
+                  className="font-mono text-xs text-[var(--color-ink-soft)] hover:text-[var(--color-ink)]"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

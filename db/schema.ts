@@ -32,6 +32,23 @@ export const safetyEquipmentKindEnum = pgEnum("safety_equipment_kind", [
   "emergency_shower",
 ]);
 
+export const issueSubjectTypeEnum = pgEnum("issue_subject_type", [
+  "room",
+  "area",
+  "equipment",
+  "safety_equipment",
+]);
+
+export const departmentEnum = pgEnum("department", [
+  "IT",
+  "Facilities",
+  "Safety",
+  "Security",
+  "Operations",
+]);
+
+export const issueStatusEnum = pgEnum("issue_status", ["open", "resolved"]);
+
 export const roleEnum = pgEnum("role", ["editor", "member"]);
 
 // Top-level tenant. All other data is scoped to exactly one Organization.
@@ -121,6 +138,24 @@ export const safetyEquipment = pgTable("safety_equipment", {
   kind: safetyEquipmentKindEnum("kind").notNull(),
   geom: geometryPoint("geom").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// A polymorphic problem report referencing exactly one Room, Area, Equipment,
+// or Safety Equipment instance (subjectType + subjectId). No login: reporter
+// is a free-text name (ADR-0007). Department routes the report but does not
+// gate who can resolve it — there's no access control in this build. Postgres
+// can't FK a single column across four different subject tables, so subjectId
+// is validated at the application layer instead.
+export const issues = pgTable("issues", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  subjectType: issueSubjectTypeEnum("subject_type").notNull(),
+  subjectId: uuid("subject_id").notNull(),
+  reporterName: text("reporter_name").notNull(),
+  description: text("description").notNull(),
+  department: departmentEnum("department").notNull(),
+  status: issueStatusEnum("status").notNull().default("open"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  resolvedAt: timestamp("resolved_at", { withTimezone: true }),
 });
 
 // An enclosed space, arbitrary polygon, mapped against the Floor Plan's
