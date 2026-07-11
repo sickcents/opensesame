@@ -4,3 +4,4 @@
 [1] Project scaffold — Next.js + Neon Postgres/PostGIS, base schema - DONE
 [2] Floor Plan extraction — PDF upload to text-stripped SVG - DONE
 [3] Scale Calibration — two-point real-world distance per Floor - DONE
+[4] Geo-Anchoring — pin + rotation per Facility - DONE
