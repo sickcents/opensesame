@@ -24,3 +24,7 @@ next-env.d.ts
 # local verification artifacts
 .playwright-mcp/
 /*.png
+
+# Python
+__pycache__/
+*.pyc

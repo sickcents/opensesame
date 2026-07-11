@@ -1,20 +1,33 @@
+import Link from "next/link";
+import { eq } from "drizzle-orm";
 import { db } from "@/db/client";
-import { organizations, facilities } from "@/db/schema";
+import { organizations, facilities, floors } from "@/db/schema";
 
 async function getOverview() {
   try {
     const [org] = await db.select().from(organizations).limit(1);
-    const facilityCount = org
-      ? (await db.select().from(facilities)).length
-      : 0;
-    return { org, facilityCount, connected: true as const };
+    if (!org) return { org: null, facilityRows: [], connected: true as const };
+
+    const facilityRows = await db
+      .select({
+        id: facilities.id,
+        name: facilities.name,
+        firstFloorId: floors.id,
+      })
+      .from(facilities)
+      .leftJoin(floors, eq(floors.facilityId, facilities.id))
+      .where(eq(facilities.organizationId, org.id));
+
+    return { org, facilityRows, connected: true as const };
   } catch {
-    return { org: null, facilityCount: 0, connected: false as const };
+    return { org: null, facilityRows: [], connected: false as const };
   }
 }
 
 export default async function Home() {
-  const { org, facilityCount, connected } = await getOverview();
+  const { org, facilityRows, connected } = await getOverview();
+
+  const facilityCount = new Set(facilityRows.map((f) => f.id)).size;
 
   return (
     <main className="blueprint-grid relative min-h-screen">
@@ -58,9 +71,37 @@ export default async function Home() {
 
           <p className="mt-2 text-sm leading-relaxed text-[var(--color-ink-soft)]">
             {connected
-              ? "A Facility is created by uploading a PDF for its first Floor. That upload flow lands in a later build step."
+              ? "A Facility is created by uploading a PDF for its first Floor."
               : "This build step scaffolds the schema only — connect DATABASE_URL to see live Organization and Facility data here."}
           </p>
+
+          {facilityRows.length > 0 && (
+            <ul className="mt-5 divide-y divide-[var(--color-grid)] border-t border-[var(--color-grid)]">
+              {facilityRows.map((f) => (
+                <li key={f.id} className="py-2.5">
+                  {f.firstFloorId ? (
+                    <Link
+                      href={`/floors/${f.firstFloorId}`}
+                      className="text-sm text-[var(--color-ink)] hover:text-[var(--color-signal)]"
+                    >
+                      {f.name}
+                    </Link>
+                  ) : (
+                    <span className="text-sm text-[var(--color-ink)]">{f.name}</span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {connected && (
+            <Link
+              href="/facilities/new"
+              className="mt-6 block w-full rounded-sm bg-[var(--color-ink)] px-4 py-2.5 text-center font-mono text-sm font-medium text-[var(--color-paper)] transition-opacity hover:opacity-90"
+            >
+              Add a Facility
+            </Link>
+          )}
 
           <dl className="mt-6 grid grid-cols-2 gap-3 border-t border-[var(--color-grid)] pt-4 font-mono text-xs text-[var(--color-ink-soft)]">
             <div>
