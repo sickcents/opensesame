@@ -5,7 +5,19 @@ import {
   timestamp,
   doublePrecision,
   pgEnum,
+  customType,
 } from "drizzle-orm/pg-core";
+
+// PostGIS polygon geometry, stored in a Floor's local real-world meters
+// (SRID 0 — a planar local coordinate system, not lat/lng). Drizzle has no
+// built-in geometry type; reads/writes for this column go through raw SQL
+// (ST_GeomFromText / ST_AsText) rather than the typed query builder — see
+// lib/wkt.ts and the room/area actions.
+const geometryPolygon = customType<{ data: string }>({
+  dataType() {
+    return "geometry(Polygon, 0)";
+  },
+});
 
 export const roleEnum = pgEnum("role", ["editor", "member"]);
 
@@ -83,5 +95,29 @@ export const equipment = pgTable("equipment", {
     .references(() => equipmentTypes.id, { onDelete: "restrict" }),
   xMeters: doublePrecision("x_meters").notNull(),
   yMeters: doublePrecision("y_meters").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// An enclosed space, arbitrary polygon, mapped against the Floor Plan's
+// real-world coordinates (ADR-0006: PostGIS geometry, not JSON).
+export const rooms = pgTable("rooms", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  floorId: uuid("floor_id")
+    .notNull()
+    .references(() => floors.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  geom: geometryPolygon("geom").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// A polygon region that isn't an enclosed Room (walkway, PPE zone, ...).
+// Same geometry as Room, distinguished by not representing a walled space.
+export const areas = pgTable("areas", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  floorId: uuid("floor_id")
+    .notNull()
+    .references(() => floors.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  geom: geometryPolygon("geom").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });

@@ -1,9 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import { floors, equipment } from "@/db/schema";
+import { pointsToWktPolygon, type MeterPoint } from "@/lib/wkt";
 
 export async function setScaleCalibration(
   floorId: string,
@@ -36,5 +37,36 @@ export async function placeEquipment(
   yMeters: number,
 ) {
   await db.insert(equipment).values({ floorId, equipmentTypeId, xMeters, yMeters });
+  revalidatePath(`/floors/${floorId}`);
+}
+
+export async function createSpace(
+  floorId: string,
+  kind: "room" | "area",
+  name: string,
+  pointsMeters: MeterPoint[],
+) {
+  const trimmedName = name.trim();
+  if (!trimmedName) {
+    throw new Error("Name the space before saving.");
+  }
+  if (pointsMeters.length < 3) {
+    throw new Error("A polygon needs at least 3 points.");
+  }
+
+  const wkt = pointsToWktPolygon(pointsMeters);
+
+  if (kind === "room") {
+    await db.execute(sql`
+      INSERT INTO rooms (floor_id, name, geom)
+      VALUES (${floorId}, ${trimmedName}, ST_GeomFromText(${wkt}, 0))
+    `);
+  } else {
+    await db.execute(sql`
+      INSERT INTO areas (floor_id, name, geom)
+      VALUES (${floorId}, ${trimmedName}, ST_GeomFromText(${wkt}, 0))
+    `);
+  }
+
   revalidatePath(`/floors/${floorId}`);
 }

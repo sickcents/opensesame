@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition, type MouseEvent } from "react";
-import { setScaleCalibration, placeEquipment } from "./actions";
+import { setScaleCalibration, placeEquipment, createSpace } from "./actions";
 
 type Point = { x: number; y: number };
 
@@ -22,7 +22,13 @@ type PlacedEquipment = {
   depthM: number;
 };
 
-type Mode = "idle" | "calibrate" | "equipment";
+type Space = {
+  id: string;
+  name: string;
+  points: Point[]; // meters
+};
+
+type Mode = "idle" | "calibrate" | "equipment" | "room" | "area";
 
 export function FloorPlanCanvas({
   floorId,
@@ -33,6 +39,8 @@ export function FloorPlanCanvas({
   scaleMetersPerSvgUnit,
   equipmentTypes,
   placedEquipment,
+  rooms,
+  areas,
 }: {
   floorId: string;
   floorName: string;
@@ -42,11 +50,15 @@ export function FloorPlanCanvas({
   scaleMetersPerSvgUnit: number | null;
   equipmentTypes: EquipmentType[];
   placedEquipment: PlacedEquipment[];
+  rooms: Space[];
+  areas: Space[];
 }) {
   const [mode, setMode] = useState<Mode>("idle");
   const [points, setPoints] = useState<Point[]>([]);
   const [distance, setDistance] = useState("");
   const [armedTypeId, setArmedTypeId] = useState<string | null>(null);
+  const [spaceStep, setSpaceStep] = useState<"drawing" | "naming">("drawing");
+  const [spaceName, setSpaceName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -86,6 +98,13 @@ export function FloorPlanCanvas({
           setError(err instanceof Error ? err.message : "Couldn't place equipment.");
         }
       });
+      return;
+    }
+    if (mode === "room" || mode === "area") {
+      if (spaceStep !== "drawing") return;
+      const p = svgPointFromClick(e);
+      if (!p) return;
+      setPoints((pts) => [...pts, { x: p.x, y: p.y }]);
     }
   }
 
@@ -134,6 +153,56 @@ export function FloorPlanCanvas({
     }
   }
 
+  function startDrawingSpace(kind: "room" | "area") {
+    setMode(kind);
+    setPoints([]);
+    setSpaceStep("drawing");
+    setSpaceName("");
+    setError(null);
+  }
+
+  function cancelSpace() {
+    setMode("idle");
+    setPoints([]);
+    setSpaceStep("drawing");
+    setSpaceName("");
+    setError(null);
+  }
+
+  function undoSpacePoint() {
+    setPoints((pts) => pts.slice(0, -1));
+  }
+
+  function finishSpaceDrawing() {
+    if (points.length < 3) {
+      setError("A polygon needs at least 3 points.");
+      return;
+    }
+    setError(null);
+    setSpaceStep("naming");
+  }
+
+  function saveSpace() {
+    if (!scaleMetersPerSvgUnit || (mode !== "room" && mode !== "area")) return;
+    if (!spaceName.trim()) {
+      setError("Name the space before saving.");
+      return;
+    }
+    const meterPoints = points.map((p) => ({
+      x: p.x * scaleMetersPerSvgUnit,
+      y: p.y * scaleMetersPerSvgUnit,
+    }));
+    setError(null);
+    startTransition(async () => {
+      try {
+        await createSpace(floorId, mode as "room" | "area", spaceName, meterPoints);
+        cancelSpace();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Couldn't save the space.");
+      }
+    });
+  }
+
   const markerRadius = viewBoxWidth / 150;
 
   const equipmentRects = useMemo(() => {
@@ -155,6 +224,20 @@ export function FloorPlanCanvas({
       };
     });
   }, [placedEquipment, scaleMetersPerSvgUnit]);
+
+  function toSvgPoints(space: Space) {
+    if (!scaleMetersPerSvgUnit) return { poly: "", cx: 0, cy: 0 };
+    const svgPts = space.points.map((p) => ({
+      x: p.x / scaleMetersPerSvgUnit,
+      y: p.y / scaleMetersPerSvgUnit,
+    }));
+    const cx = svgPts.reduce((s, p) => s + p.x, 0) / svgPts.length;
+    const cy = svgPts.reduce((s, p) => s + p.y, 0) / svgPts.length;
+    return { poly: svgPts.map((p) => `${p.x},${p.y}`).join(" "), cx, cy };
+  }
+
+  const isDrawingSpace = mode === "room" || mode === "area";
+  const spaceLabel = mode === "room" ? "Room" : "Area";
 
   return (
     <div className="w-full max-w-4xl">
@@ -180,6 +263,22 @@ export function FloorPlanCanvas({
               + {t.name}
             </button>
           ))}
+          <span className="mx-1 text-[var(--color-grid)]">|</span>
+          {(["room", "area"] as const).map((kind) => (
+            <button
+              key={kind}
+              type="button"
+              disabled={!scaleMetersPerSvgUnit}
+              onClick={() => startDrawingSpace(kind)}
+              className={`rounded-sm border px-2.5 py-1 font-mono text-xs capitalize disabled:cursor-not-allowed disabled:opacity-40 ${
+                mode === kind
+                  ? "border-[var(--color-signal)] bg-[var(--color-signal)]/10 text-[var(--color-signal)]"
+                  : "border-[var(--color-grid)] bg-[var(--color-panel)] text-[var(--color-ink)] hover:border-[var(--color-ink-soft)]"
+              }`}
+            >
+              ▱ Draw {kind}
+            </button>
+          ))}
         </div>
       )}
 
@@ -198,6 +297,58 @@ export function FloorPlanCanvas({
               mode !== "idle" ? "cursor-crosshair" : "pointer-events-none"
             }`}
           >
+            {rooms.map((r) => {
+              const { poly, cx, cy } = toSvgPoints(r);
+              return (
+                <g key={r.id}>
+                  <polygon
+                    points={poly}
+                    fill="var(--color-ink)"
+                    fillOpacity={0.06}
+                    stroke="var(--color-ink)"
+                    strokeWidth={viewBoxWidth / 500}
+                  />
+                  <text
+                    x={cx}
+                    y={cy}
+                    textAnchor="middle"
+                    dominantBaseline="middle"
+                    fontSize={viewBoxWidth / 55}
+                    fill="var(--color-ink)"
+                    className="select-none font-mono"
+                  >
+                    {r.name}
+                  </text>
+                </g>
+              );
+            })}
+            {areas.map((a) => {
+              const { poly, cx, cy } = toSvgPoints(a);
+              return (
+                <g key={a.id}>
+                  <polygon
+                    points={poly}
+                    fill="var(--color-ink-soft)"
+                    fillOpacity={0.08}
+                    stroke="var(--color-ink-soft)"
+                    strokeWidth={viewBoxWidth / 500}
+                    strokeDasharray={`${viewBoxWidth / 150} ${viewBoxWidth / 250}`}
+                  />
+                  <text
+                    x={cx}
+                    y={cy}
+                    textAnchor="middle"
+                    dominantBaseline="middle"
+                    fontSize={viewBoxWidth / 55}
+                    fill="var(--color-ink-soft)"
+                    className="select-none font-mono"
+                  >
+                    {a.name}
+                  </text>
+                </g>
+              );
+            })}
+
             {equipmentRects.map((r) => (
               <g key={r.id}>
                 <rect
@@ -240,6 +391,31 @@ export function FloorPlanCanvas({
                     strokeDasharray="4 3"
                   />
                 )}
+              </>
+            )}
+
+            {isDrawingSpace && spaceStep === "drawing" && points.length > 0 && (
+              <>
+                <polyline
+                  points={points.map((p) => `${p.x},${p.y}`).join(" ")}
+                  fill="none"
+                  stroke="var(--color-signal)"
+                  strokeWidth={viewBoxWidth / 400}
+                />
+                {points.length >= 3 && (
+                  <line
+                    x1={points[points.length - 1].x}
+                    y1={points[points.length - 1].y}
+                    x2={points[0].x}
+                    y2={points[0].y}
+                    stroke="var(--color-signal)"
+                    strokeWidth={viewBoxWidth / 400}
+                    strokeDasharray="4 3"
+                  />
+                )}
+                {points.map((p, i) => (
+                  <circle key={i} cx={p.x} cy={p.y} r={markerRadius} fill="var(--color-signal)" />
+                ))}
               </>
             )}
           </svg>
@@ -287,6 +463,84 @@ export function FloorPlanCanvas({
               </p>
             )}
           </div>
+        ) : isDrawingSpace ? (
+          <div className="mt-4 space-y-2 border-t border-[var(--color-grid)] pt-3">
+            {spaceStep === "drawing" ? (
+              <>
+                <p className="font-mono text-xs text-[var(--color-ink-soft)]">
+                  Click points to outline the {spaceLabel.toLowerCase()} ({points.length} picked).
+                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={finishSpaceDrawing}
+                    disabled={points.length < 3}
+                    className="rounded-sm bg-[var(--color-ink)] px-3 py-1 font-mono text-xs text-[var(--color-paper)] disabled:opacity-40"
+                  >
+                    Finish
+                  </button>
+                  <button
+                    type="button"
+                    onClick={undoSpacePoint}
+                    disabled={points.length === 0}
+                    className="font-mono text-xs text-[var(--color-ink-soft)] hover:text-[var(--color-ink)] disabled:opacity-40"
+                  >
+                    Undo point
+                  </button>
+                  <button
+                    type="button"
+                    onClick={cancelSpace}
+                    className="font-mono text-xs text-[var(--color-ink-soft)] hover:text-[var(--color-ink)]"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="font-mono text-xs text-[var(--color-ink-soft)]">
+                  Name this {spaceLabel.toLowerCase()}.
+                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <input
+                    type="text"
+                    autoFocus
+                    value={spaceName}
+                    onChange={(e) => setSpaceName(e.target.value)}
+                    placeholder={mode === "room" ? "Room 101" : "Loading dock walkway"}
+                    className="w-56 rounded-sm border border-[var(--color-grid)] bg-[var(--color-paper)] px-2 py-1 text-sm text-[var(--color-ink)] focus:border-[var(--color-ink)] focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={saveSpace}
+                    disabled={isPending}
+                    className="rounded-sm bg-[var(--color-ink)] px-3 py-1 font-mono text-xs text-[var(--color-paper)] disabled:opacity-60"
+                  >
+                    {isPending ? "Saving…" : `Save ${spaceLabel}`}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSpaceStep("drawing")}
+                    className="font-mono text-xs text-[var(--color-ink-soft)] hover:text-[var(--color-ink)]"
+                  >
+                    Back
+                  </button>
+                  <button
+                    type="button"
+                    onClick={cancelSpace}
+                    className="font-mono text-xs text-[var(--color-ink-soft)] hover:text-[var(--color-ink)]"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </>
+            )}
+            {error && (
+              <p role="alert" className="text-sm text-[var(--color-signal)]">
+                {error}
+              </p>
+            )}
+          </div>
         ) : (
           <div className="mt-4 flex items-center justify-between border-t border-[var(--color-grid)] pt-3 font-mono text-xs text-[var(--color-ink-soft)]">
             <span>
@@ -311,7 +565,7 @@ export function FloorPlanCanvas({
             </div>
           </div>
         )}
-        {mode !== "calibrate" && error && (
+        {mode === "equipment" && error && (
           <p role="alert" className="mt-2 text-sm text-[var(--color-signal)]">
             {error}
           </p>

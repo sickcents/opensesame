@@ -1,11 +1,14 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import { floors, facilities, equipment, equipmentTypes } from "@/db/schema";
+import { wktPolygonToPoints } from "@/lib/wkt";
 import { FloorPlanCanvas } from "./floor-plan-canvas";
 
 const VIEWBOX_RE = /viewBox="0 0 ([\d.]+) ([\d.]+)"/;
+
+type SpaceRow = { id: string; name: string; wkt: string };
 
 export default async function FloorPage({
   params,
@@ -30,7 +33,7 @@ export default async function FloorPage({
 
   if (!row) notFound();
 
-  const [allEquipmentTypes, placedEquipment] = await Promise.all([
+  const [allEquipmentTypes, placedEquipment, roomRows, areaRows] = await Promise.all([
     db.select().from(equipmentTypes),
     db
       .select({
@@ -44,7 +47,24 @@ export default async function FloorPage({
       .from(equipment)
       .innerJoin(equipmentTypes, eq(equipment.equipmentTypeId, equipmentTypes.id))
       .where(eq(equipment.floorId, id)),
+    db.execute<SpaceRow>(
+      sql`SELECT id, name, ST_AsText(geom) as wkt FROM rooms WHERE floor_id = ${id}`,
+    ),
+    db.execute<SpaceRow>(
+      sql`SELECT id, name, ST_AsText(geom) as wkt FROM areas WHERE floor_id = ${id}`,
+    ),
   ]);
+
+  const rooms = roomRows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    points: wktPolygonToPoints(r.wkt),
+  }));
+  const areas = areaRows.map((r) => ({
+    id: r.id,
+    name: r.name,
+    points: wktPolygonToPoints(r.wkt),
+  }));
 
   const viewBoxMatch = row.floorPlanSvg?.match(VIEWBOX_RE);
   const viewBoxWidth = viewBoxMatch ? Number(viewBoxMatch[1]) : 100;
@@ -78,6 +98,8 @@ export default async function FloorPage({
             scaleMetersPerSvgUnit={row.scaleMetersPerSvgUnit}
             equipmentTypes={allEquipmentTypes}
             placedEquipment={placedEquipment}
+            rooms={rooms}
+            areas={areas}
           />
         ) : (
           <p className="text-sm text-[var(--color-ink-soft)]">
