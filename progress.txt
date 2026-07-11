@@ -2,3 +2,4 @@
 # Format: [ID] [Title] - DONE | FAILED (reason) | BLOCKED (reason)
 
 [1] Project scaffold — Next.js + Neon Postgres/PostGIS, base schema - DONE
+[2] Floor Plan extraction — PDF upload to text-stripped SVG - DONE
