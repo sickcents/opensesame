@@ -1,7 +1,13 @@
 "use client";
 
 import { useMemo, useState, useTransition, type MouseEvent } from "react";
-import { setScaleCalibration, placeEquipment, createSpace } from "./actions";
+import {
+  setScaleCalibration,
+  placeEquipment,
+  createSpace,
+  placeSafetyEquipment,
+  type SafetyEquipmentKind,
+} from "./actions";
 
 type Point = { x: number; y: number };
 
@@ -28,7 +34,21 @@ type Space = {
   points: Point[]; // meters
 };
 
-type Mode = "idle" | "calibrate" | "equipment" | "room" | "area";
+type SafetyEquipmentItem = {
+  id: string;
+  kind: string;
+  xMeters: number;
+  yMeters: number;
+};
+
+const SAFETY_KINDS: { kind: SafetyEquipmentKind; label: string; code: string }[] = [
+  { kind: "exit", label: "Exit", code: "EX" },
+  { kind: "fire_extinguisher", label: "Fire Extinguisher", code: "FE" },
+  { kind: "first_aid", label: "First Aid", code: "FA" },
+  { kind: "emergency_shower", label: "Emergency Shower", code: "ES" },
+];
+
+type Mode = "idle" | "calibrate" | "equipment" | "room" | "area" | "safety";
 
 export function FloorPlanCanvas({
   floorId,
@@ -41,6 +61,7 @@ export function FloorPlanCanvas({
   placedEquipment,
   rooms,
   areas,
+  safetyEquipment,
 }: {
   floorId: string;
   floorName: string;
@@ -52,11 +73,13 @@ export function FloorPlanCanvas({
   placedEquipment: PlacedEquipment[];
   rooms: Space[];
   areas: Space[];
+  safetyEquipment: SafetyEquipmentItem[];
 }) {
   const [mode, setMode] = useState<Mode>("idle");
   const [points, setPoints] = useState<Point[]>([]);
   const [distance, setDistance] = useState("");
   const [armedTypeId, setArmedTypeId] = useState<string | null>(null);
+  const [armedKind, setArmedKind] = useState<SafetyEquipmentKind | null>(null);
   const [spaceStep, setSpaceStep] = useState<"drawing" | "naming">("drawing");
   const [spaceName, setSpaceName] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -96,6 +119,21 @@ export function FloorPlanCanvas({
           await placeEquipment(floorId, armedTypeId, xMeters, yMeters);
         } catch (err) {
           setError(err instanceof Error ? err.message : "Couldn't place equipment.");
+        }
+      });
+      return;
+    }
+    if (mode === "safety") {
+      if (!armedKind || !scaleMetersPerSvgUnit) return;
+      const p = svgPointFromClick(e);
+      if (!p) return;
+      const xMeters = p.x * scaleMetersPerSvgUnit;
+      const yMeters = p.y * scaleMetersPerSvgUnit;
+      startTransition(async () => {
+        try {
+          await placeSafetyEquipment(floorId, armedKind, xMeters, yMeters);
+        } catch (err) {
+          setError(err instanceof Error ? err.message : "Couldn't place Safety Equipment.");
         }
       });
       return;
@@ -153,6 +191,17 @@ export function FloorPlanCanvas({
     }
   }
 
+  function toggleArmedKind(kind: SafetyEquipmentKind) {
+    if (mode === "safety" && armedKind === kind) {
+      setMode("idle");
+      setArmedKind(null);
+    } else {
+      setMode("safety");
+      setArmedKind(kind);
+      setError(null);
+    }
+  }
+
   function startDrawingSpace(kind: "room" | "area") {
     setMode(kind);
     setPoints([]);
@@ -204,6 +253,7 @@ export function FloorPlanCanvas({
   }
 
   const markerRadius = viewBoxWidth / 150;
+  const safetyRadius = viewBoxWidth / 130;
 
   const equipmentRects = useMemo(() => {
     if (!scaleMetersPerSvgUnit) return [];
@@ -224,6 +274,20 @@ export function FloorPlanCanvas({
       };
     });
   }, [placedEquipment, scaleMetersPerSvgUnit]);
+
+  const safetyMarkers = useMemo(() => {
+    if (!scaleMetersPerSvgUnit) return [];
+    return safetyEquipment.map((s) => {
+      const info = SAFETY_KINDS.find((k) => k.kind === s.kind);
+      return {
+        id: s.id,
+        cx: s.xMeters / scaleMetersPerSvgUnit,
+        cy: s.yMeters / scaleMetersPerSvgUnit,
+        code: info?.code ?? "?",
+        label: info?.label ?? s.kind,
+      };
+    });
+  }, [safetyEquipment, scaleMetersPerSvgUnit]);
 
   function toSvgPoints(space: Space) {
     if (!scaleMetersPerSvgUnit) return { poly: "", cx: 0, cy: 0 };
@@ -277,6 +341,22 @@ export function FloorPlanCanvas({
               }`}
             >
               ▱ Draw {kind}
+            </button>
+          ))}
+          <span className="mx-1 text-[var(--color-grid)]">|</span>
+          {SAFETY_KINDS.map(({ kind, label }) => (
+            <button
+              key={kind}
+              type="button"
+              disabled={!scaleMetersPerSvgUnit}
+              onClick={() => toggleArmedKind(kind)}
+              className={`rounded-sm border px-2.5 py-1 font-mono text-xs disabled:cursor-not-allowed disabled:opacity-40 ${
+                mode === "safety" && armedKind === kind
+                  ? "border-[var(--color-signal)] bg-[var(--color-signal)]/10 text-[var(--color-signal)]"
+                  : "border-[var(--color-grid)] bg-[var(--color-panel)] text-[var(--color-ink)] hover:border-[var(--color-ink-soft)]"
+              }`}
+            >
+              ● {label}
             </button>
           ))}
         </div>
@@ -371,6 +451,30 @@ export function FloorPlanCanvas({
                   className="select-none font-mono"
                 >
                   {r.label}
+                </text>
+              </g>
+            ))}
+
+            {safetyMarkers.map((s) => (
+              <g key={s.id}>
+                <circle
+                  cx={s.cx}
+                  cy={s.cy}
+                  r={safetyRadius}
+                  fill="var(--color-panel)"
+                  stroke="var(--color-signal)"
+                  strokeWidth={viewBoxWidth / 400}
+                />
+                <text
+                  x={s.cx}
+                  y={s.cy}
+                  textAnchor="middle"
+                  dominantBaseline="middle"
+                  fontSize={viewBoxWidth / 110}
+                  fill="var(--color-signal)"
+                  className="select-none font-mono font-bold"
+                >
+                  {s.code}
                 </text>
               </g>
             ))}
@@ -547,7 +651,7 @@ export function FloorPlanCanvas({
               {scaleMetersPerSvgUnit
                 ? `scale — 1 unit = ${scaleMetersPerSvgUnit.toFixed(4)} m`
                 : "scale — not calibrated"}
-              {mode === "equipment" && (
+              {(mode === "equipment" || mode === "safety") && (
                 <span className="ml-3 text-[var(--color-signal)]">
                   click the plan to place
                 </span>
@@ -565,7 +669,7 @@ export function FloorPlanCanvas({
             </div>
           </div>
         )}
-        {mode === "equipment" && error && (
+        {(mode === "equipment" || mode === "safety") && error && (
           <p role="alert" className="mt-2 text-sm text-[var(--color-signal)]">
             {error}
           </p>

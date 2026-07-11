@@ -19,6 +19,19 @@ const geometryPolygon = customType<{ data: string }>({
   },
 });
 
+const geometryPoint = customType<{ data: string }>({
+  dataType() {
+    return "geometry(Point, 0)";
+  },
+});
+
+export const safetyEquipmentKindEnum = pgEnum("safety_equipment_kind", [
+  "exit",
+  "fire_extinguisher",
+  "first_aid",
+  "emergency_shower",
+]);
+
 export const roleEnum = pgEnum("role", ["editor", "member"]);
 
 // Top-level tenant. All other data is scoped to exactly one Organization.
@@ -83,8 +96,8 @@ export const equipmentTypes = pgTable("equipment_types", {
 });
 
 // An instance of an Equipment Type placed on a Floor Plan. Position is the
-// rectangle's center, in real-world meters (via the Floor's Scale
-// Calibration) — never raw SVG coordinates.
+// rectangle's center, a PostGIS point in real-world meters (via the Floor's
+// Scale Calibration) — never raw SVG coordinates (ADR-0006).
 export const equipment = pgTable("equipment", {
   id: uuid("id").primaryKey().defaultRandom(),
   floorId: uuid("floor_id")
@@ -93,8 +106,20 @@ export const equipment = pgTable("equipment", {
   equipmentTypeId: uuid("equipment_type_id")
     .notNull()
     .references(() => equipmentTypes.id, { onDelete: "restrict" }),
-  xMeters: doublePrecision("x_meters").notNull(),
-  yMeters: doublePrecision("y_meters").notNull(),
+  geom: geometryPoint("geom").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+// A point marker for a life-safety item (exit, fire extinguisher, ...).
+// Unlike Equipment, it has no footprint — a location, not a placed object
+// with real-world size. Same PostGIS point storage as Equipment.
+export const safetyEquipment = pgTable("safety_equipment", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  floorId: uuid("floor_id")
+    .notNull()
+    .references(() => floors.id, { onDelete: "cascade" }),
+  kind: safetyEquipmentKindEnum("kind").notNull(),
+  geom: geometryPoint("geom").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

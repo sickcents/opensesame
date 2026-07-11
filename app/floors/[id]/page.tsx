@@ -2,13 +2,22 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { eq, sql } from "drizzle-orm";
 import { db } from "@/db/client";
-import { floors, facilities, equipment, equipmentTypes } from "@/db/schema";
+import { floors, facilities, equipmentTypes } from "@/db/schema";
 import { wktPolygonToPoints } from "@/lib/wkt";
 import { FloorPlanCanvas } from "./floor-plan-canvas";
 
 const VIEWBOX_RE = /viewBox="0 0 ([\d.]+) ([\d.]+)"/;
 
 type SpaceRow = { id: string; name: string; wkt: string };
+type EquipmentRow = {
+  id: string;
+  x: number;
+  y: number;
+  typeName: string;
+  widthM: number;
+  depthM: number;
+};
+type SafetyEquipmentRow = { id: string; kind: string; x: number; y: number };
 
 export default async function FloorPage({
   params,
@@ -33,28 +42,37 @@ export default async function FloorPage({
 
   if (!row) notFound();
 
-  const [allEquipmentTypes, placedEquipment, roomRows, areaRows] = await Promise.all([
-    db.select().from(equipmentTypes),
-    db
-      .select({
-        id: equipment.id,
-        xMeters: equipment.xMeters,
-        yMeters: equipment.yMeters,
-        typeName: equipmentTypes.name,
-        widthM: equipmentTypes.widthM,
-        depthM: equipmentTypes.depthM,
-      })
-      .from(equipment)
-      .innerJoin(equipmentTypes, eq(equipment.equipmentTypeId, equipmentTypes.id))
-      .where(eq(equipment.floorId, id)),
-    db.execute<SpaceRow>(
-      sql`SELECT id, name, ST_AsText(geom) as wkt FROM rooms WHERE floor_id = ${id}`,
-    ),
-    db.execute<SpaceRow>(
-      sql`SELECT id, name, ST_AsText(geom) as wkt FROM areas WHERE floor_id = ${id}`,
-    ),
-  ]);
+  const [allEquipmentTypes, equipmentRows, roomRows, areaRows, safetyRows] =
+    await Promise.all([
+      db.select().from(equipmentTypes),
+      db.execute<EquipmentRow>(sql`
+        SELECT e.id, ST_X(e.geom) as x, ST_Y(e.geom) as y,
+               t.name as "typeName", t.width_m as "widthM", t.depth_m as "depthM"
+        FROM equipment e
+        JOIN equipment_types t ON t.id = e.equipment_type_id
+        WHERE e.floor_id = ${id}
+      `),
+      db.execute<SpaceRow>(
+        sql`SELECT id, name, ST_AsText(geom) as wkt FROM rooms WHERE floor_id = ${id}`,
+      ),
+      db.execute<SpaceRow>(
+        sql`SELECT id, name, ST_AsText(geom) as wkt FROM areas WHERE floor_id = ${id}`,
+      ),
+      db.execute<SafetyEquipmentRow>(sql`
+        SELECT id, kind, ST_X(geom) as x, ST_Y(geom) as y
+        FROM safety_equipment
+        WHERE floor_id = ${id}
+      `),
+    ]);
 
+  const placedEquipment = equipmentRows.map((r) => ({
+    id: r.id,
+    xMeters: r.x,
+    yMeters: r.y,
+    typeName: r.typeName,
+    widthM: r.widthM,
+    depthM: r.depthM,
+  }));
   const rooms = roomRows.map((r) => ({
     id: r.id,
     name: r.name,
@@ -64,6 +82,12 @@ export default async function FloorPage({
     id: r.id,
     name: r.name,
     points: wktPolygonToPoints(r.wkt),
+  }));
+  const safetyEquipment = safetyRows.map((r) => ({
+    id: r.id,
+    kind: r.kind,
+    xMeters: r.x,
+    yMeters: r.y,
   }));
 
   const viewBoxMatch = row.floorPlanSvg?.match(VIEWBOX_RE);
@@ -100,6 +124,7 @@ export default async function FloorPage({
             placedEquipment={placedEquipment}
             rooms={rooms}
             areas={areas}
+            safetyEquipment={safetyEquipment}
           />
         ) : (
           <p className="text-sm text-[var(--color-ink-soft)]">

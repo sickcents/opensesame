@@ -3,8 +3,16 @@
 import { revalidatePath } from "next/cache";
 import { eq, sql } from "drizzle-orm";
 import { db } from "@/db/client";
-import { floors, equipment } from "@/db/schema";
+import { floors } from "@/db/schema";
 import { pointsToWktPolygon, type MeterPoint } from "@/lib/wkt";
+
+const SAFETY_EQUIPMENT_KINDS = [
+  "exit",
+  "fire_extinguisher",
+  "first_aid",
+  "emergency_shower",
+] as const;
+export type SafetyEquipmentKind = (typeof SAFETY_EQUIPMENT_KINDS)[number];
 
 export async function setScaleCalibration(
   floorId: string,
@@ -36,7 +44,26 @@ export async function placeEquipment(
   xMeters: number,
   yMeters: number,
 ) {
-  await db.insert(equipment).values({ floorId, equipmentTypeId, xMeters, yMeters });
+  await db.execute(sql`
+    INSERT INTO equipment (floor_id, equipment_type_id, geom)
+    VALUES (${floorId}, ${equipmentTypeId}, ST_MakePoint(${xMeters}, ${yMeters}))
+  `);
+  revalidatePath(`/floors/${floorId}`);
+}
+
+export async function placeSafetyEquipment(
+  floorId: string,
+  kind: SafetyEquipmentKind,
+  xMeters: number,
+  yMeters: number,
+) {
+  if (!SAFETY_EQUIPMENT_KINDS.includes(kind)) {
+    throw new Error("Unknown Safety Equipment kind.");
+  }
+  await db.execute(sql`
+    INSERT INTO safety_equipment (floor_id, kind, geom)
+    VALUES (${floorId}, ${kind}, ST_MakePoint(${xMeters}, ${yMeters}))
+  `);
   revalidatePath(`/floors/${floorId}`);
 }
 
