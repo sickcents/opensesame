@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { eq } from "drizzle-orm";
+import { asc, eq } from "drizzle-orm";
 import { db } from "@/db/client";
 import { facilities, floors } from "@/db/schema";
 import GeoAnchorMap from "./geo-anchor-map-loader";
@@ -26,7 +26,8 @@ export default async function FacilityPage({
   const facilityFloors = await db
     .select()
     .from(floors)
-    .where(eq(floors.facilityId, id));
+    .where(eq(floors.facilityId, id))
+    .orderBy(asc(floors.createdAt));
 
   const firstFloor = facilityFloors[0];
   const viewBoxMatch = firstFloor?.floorPlanSvg?.match(VIEWBOX_RE);
@@ -76,32 +77,13 @@ export default async function FacilityPage({
             initialLng={facility.geoAnchorLng}
             initialRotationDeg={facility.geoAnchorRotationDeg}
             footprintInput={footprintInput}
+            floors={facilityFloors}
           />
         </div>
 
         <div className="mt-6">
           <AskPanel facilityId={facility.id} />
         </div>
-
-        {facilityFloors.length > 0 && (
-          <div className="mt-6">
-            <h2 className="font-mono text-xs uppercase tracking-wide text-[var(--color-ink-soft)]">
-              Floors
-            </h2>
-            <ul className="mt-2 divide-y divide-[var(--color-grid)] border-t border-[var(--color-grid)]">
-              {facilityFloors.map((f) => (
-                <li key={f.id} className="py-2.5">
-                  <Link
-                    href={`/floors/${f.id}`}
-                    className="text-sm text-[var(--color-ink)] hover:text-[var(--color-signal)]"
-                  >
-                    {f.name}
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
       </div>
     </main>
   );

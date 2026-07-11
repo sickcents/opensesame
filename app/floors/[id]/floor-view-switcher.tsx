@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import type { FloorPickerFloor } from "@/app/components/floor-picker";
 import { FloorPlanCanvas } from "./floor-plan-canvas";
 import Floor3DView from "./floor-3d-view-loader";
 
@@ -30,6 +31,7 @@ type SafetyEquipmentItem = { id: string; kind: string; xMeters: number; yMeters:
 export function FloorViewSwitcher(props: {
   floorId: string;
   floorName: string;
+  floors: FloorPickerFloor[];
   svgMarkup: string;
   viewBoxWidth: number;
   viewBoxHeight: number;
@@ -85,6 +87,8 @@ export function FloorViewSwitcher(props: {
           rooms={rest.rooms}
           areas={rest.areas}
           safetyEquipment={rest.safetyEquipment}
+          floors={rest.floors}
+          currentFloorId={rest.floorId}
         />
       )}
     </div>

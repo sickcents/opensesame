@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
+import { FloorPicker, type FloorPickerFloor } from "@/app/components/floor-picker";
 
 type Point = { x: number; y: number };
 
@@ -54,6 +55,8 @@ export function Floor3DView({
   rooms,
   areas,
   safetyEquipment,
+  floors,
+  currentFloorId,
 }: {
   floorWidthM: number;
   floorHeightM: number;
@@ -61,11 +64,13 @@ export function Floor3DView({
   rooms: Space3D[];
   areas: Space3D[];
   safetyEquipment: Safety3D[];
+  floors: FloorPickerFloor[];
+  currentFloorId: string;
 }) {
   const maxSpan = Math.max(floorWidthM, floorHeightM);
 
   return (
-    <div className="h-[70vh] w-full overflow-hidden rounded-sm border border-[var(--color-grid)] bg-[#eef3f5]">
+    <div className="relative h-[70vh] w-full overflow-hidden rounded-sm border border-[var(--color-grid)] bg-[#eef3f5]">
       <Canvas
         shadows
         camera={{
@@ -115,6 +120,7 @@ export function Floor3DView({
 
         <OrbitControls makeDefault />
       </Canvas>
+      <FloorPicker floors={floors} currentFloorId={currentFloorId} />
     </div>
   );
 }

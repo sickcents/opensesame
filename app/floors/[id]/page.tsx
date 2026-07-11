@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { eq, sql } from "drizzle-orm";
+import { asc, eq, sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import { floors, facilities, equipmentTypes } from "@/db/schema";
 import { wktPolygonToPoints } from "@/lib/wkt";
@@ -54,8 +54,21 @@ export default async function FloorPage({
 
   if (!row) notFound();
 
-  const [allEquipmentTypes, equipmentRows, roomRows, areaRows, safetyRows, issueRows] =
+  const [
+    siblingFloors,
+    allEquipmentTypes,
+    equipmentRows,
+    roomRows,
+    areaRows,
+    safetyRows,
+    issueRows,
+  ] =
     await Promise.all([
+      db
+        .select({ id: floors.id, name: floors.name })
+        .from(floors)
+        .where(eq(floors.facilityId, row.facilityId))
+        .orderBy(asc(floors.createdAt)),
       db.select().from(equipmentTypes),
       db.execute<EquipmentRow>(sql`
         SELECT e.id, ST_X(e.geom) as x, ST_Y(e.geom) as y,
@@ -160,6 +173,7 @@ export default async function FloorPage({
             <FloorViewSwitcher
               floorId={row.floorId}
               floorName={row.floorName}
+              floors={siblingFloors}
               svgMarkup={row.floorPlanSvg}
               viewBoxWidth={viewBoxWidth}
               viewBoxHeight={viewBoxHeight}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition, type MouseEvent } from "react";
+import { FloorPicker, type FloorPickerFloor } from "@/app/components/floor-picker";
 import {
   setScaleCalibration,
   placeEquipment,
@@ -60,6 +61,7 @@ type Mode = "idle" | "calibrate" | "equipment" | "room" | "area" | "safety";
 export function FloorPlanCanvas({
   floorId,
   floorName,
+  floors,
   svgMarkup,
   viewBoxWidth,
   viewBoxHeight,
@@ -72,6 +74,7 @@ export function FloorPlanCanvas({
 }: {
   floorId: string;
   floorName: string;
+  floors: FloorPickerFloor[];
   svgMarkup: string;
   viewBoxWidth: number;
   viewBoxHeight: number;
@@ -441,6 +444,7 @@ export function FloorPlanCanvas({
             className="[&_svg]:mx-auto [&_svg]:h-auto [&_svg]:max-h-[70vh] [&_svg]:w-full [&_svg_path]:!stroke-[var(--color-ink)]"
             dangerouslySetInnerHTML={{ __html: svgMarkup }}
           />
+          <FloorPicker floors={floors} currentFloorId={floorId} />
           <svg
             viewBox={`0 0 ${viewBoxWidth} ${viewBoxHeight}`}
             onClick={handleClick}
