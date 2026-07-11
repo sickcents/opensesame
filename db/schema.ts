@@ -57,3 +57,31 @@ export const floors = pgTable("floors", {
   floorToFloorHeightM: doublePrecision("floor_to_floor_height_m"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+// Catalog entry defining a display name and default real-world footprint.
+// Adding a new type is a data change, not a schema change (no per-instance
+// resizing or free-form equipment in v1 — every Equipment inherits its
+// type's footprint as-is).
+export const equipmentTypes = pgTable("equipment_types", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  name: text("name").notNull(),
+  widthM: doublePrecision("width_m").notNull(),
+  depthM: doublePrecision("depth_m").notNull(),
+  heightM: doublePrecision("height_m").notNull(),
+});
+
+// An instance of an Equipment Type placed on a Floor Plan. Position is the
+// rectangle's center, in real-world meters (via the Floor's Scale
+// Calibration) — never raw SVG coordinates.
+export const equipment = pgTable("equipment", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  floorId: uuid("floor_id")
+    .notNull()
+    .references(() => floors.id, { onDelete: "cascade" }),
+  equipmentTypeId: uuid("equipment_type_id")
+    .notNull()
+    .references(() => equipmentTypes.id, { onDelete: "restrict" }),
+  xMeters: doublePrecision("x_meters").notNull(),
+  yMeters: doublePrecision("y_meters").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});

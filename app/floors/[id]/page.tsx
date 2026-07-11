@@ -2,7 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { eq } from "drizzle-orm";
 import { db } from "@/db/client";
-import { floors, facilities } from "@/db/schema";
+import { floors, facilities, equipment, equipmentTypes } from "@/db/schema";
 import { FloorPlanCanvas } from "./floor-plan-canvas";
 
 const VIEWBOX_RE = /viewBox="0 0 ([\d.]+) ([\d.]+)"/;
@@ -29,6 +29,22 @@ export default async function FloorPage({
     .limit(1);
 
   if (!row) notFound();
+
+  const [allEquipmentTypes, placedEquipment] = await Promise.all([
+    db.select().from(equipmentTypes),
+    db
+      .select({
+        id: equipment.id,
+        xMeters: equipment.xMeters,
+        yMeters: equipment.yMeters,
+        typeName: equipmentTypes.name,
+        widthM: equipmentTypes.widthM,
+        depthM: equipmentTypes.depthM,
+      })
+      .from(equipment)
+      .innerJoin(equipmentTypes, eq(equipment.equipmentTypeId, equipmentTypes.id))
+      .where(eq(equipment.floorId, id)),
+  ]);
 
   const viewBoxMatch = row.floorPlanSvg?.match(VIEWBOX_RE);
   const viewBoxWidth = viewBoxMatch ? Number(viewBoxMatch[1]) : 100;
@@ -60,6 +76,8 @@ export default async function FloorPage({
             viewBoxWidth={viewBoxWidth}
             viewBoxHeight={viewBoxHeight}
             scaleMetersPerSvgUnit={row.scaleMetersPerSvgUnit}
+            equipmentTypes={allEquipmentTypes}
+            placedEquipment={placedEquipment}
           />
         ) : (
           <p className="text-sm text-[var(--color-ink-soft)]">

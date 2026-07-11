@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 import { db } from "@/db/client";
-import { floors } from "@/db/schema";
+import { floors, equipment } from "@/db/schema";
 
 export async function setScaleCalibration(
   floorId: string,
@@ -27,4 +27,14 @@ export async function setScaleCalibration(
   revalidatePath(`/floors/${floorId}`);
 
   return { scale };
+}
+
+export async function placeEquipment(
+  floorId: string,
+  equipmentTypeId: string,
+  xMeters: number,
+  yMeters: number,
+) {
+  await db.insert(equipment).values({ floorId, equipmentTypeId, xMeters, yMeters });
+  revalidatePath(`/floors/${floorId}`);
 }
