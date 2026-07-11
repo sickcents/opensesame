@@ -7,3 +7,4 @@
 [4] Geo-Anchoring — pin + rotation per Facility - DONE
 [5] Equipment Type catalog + Equipment placement - DONE
 [6] Room and Area polygon editor with PostGIS storage - DONE
+[7] Safety Equipment point markers - DONE (also fixed issue #5's Equipment to use PostGIS Point geometry per ADR-0006)
