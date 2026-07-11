@@ -10,3 +10,4 @@
 [7] Safety Equipment point markers - DONE (also fixed issue #5's Equipment to use PostGIS Point geometry per ADR-0006)
 [8] 3D view with Equipment extrusion - DONE
 [9] World map facility overview - DONE
+[10] Issue reporting and resolution workflow - DONE
