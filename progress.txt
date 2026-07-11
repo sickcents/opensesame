@@ -12,3 +12,4 @@
 [9] World map facility overview - DONE
 [10] Issue reporting and resolution workflow - DONE
 [11] Gemini structured spatial query tools - DONE
+[12] Floor picker as a map-overlay control - DONE (also added the repo's first test setup: Vitest + RTL, per issue #12's testing decisions)

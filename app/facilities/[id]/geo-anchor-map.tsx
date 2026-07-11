@@ -1,10 +1,18 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { MapContainer, TileLayer, Marker, Polygon, useMapEvents } from "react-leaflet";
+import {
+  MapContainer,
+  TileLayer,
+  Marker,
+  Polygon,
+  AttributionControl,
+  useMapEvents,
+} from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { floorPlanFootprint } from "@/lib/geo";
+import { FloorPicker, type FloorPickerFloor } from "@/app/components/floor-picker";
 import { setGeoAnchor } from "./actions";
 
 const pinIcon = L.divIcon({
@@ -29,6 +37,7 @@ export function GeoAnchorMap({
   initialLng,
   initialRotationDeg,
   footprintInput,
+  floors,
 }: {
   facilityId: string;
   initialLat: number | null;
@@ -39,6 +48,7 @@ export function GeoAnchorMap({
     svgHeight: number;
     metersPerSvgUnit: number;
   } | null;
+  floors: FloorPickerFloor[];
 }) {
   const isAnchored = initialLat != null && initialLng != null;
   const [editing, setEditing] = useState(!isAnchored);
@@ -80,17 +90,19 @@ export function GeoAnchorMap({
 
   return (
     <div className="w-full">
-      <div className="h-[420px] w-full overflow-hidden rounded-sm border border-[var(--color-grid)]">
+      <div className="relative h-[420px] w-full overflow-hidden rounded-sm border border-[var(--color-grid)]">
         <MapContainer
           key={isAnchored ? "anchored" : "unanchored"}
           center={center}
           zoom={zoom}
           className="h-full w-full"
+          attributionControl={false}
         >
           <TileLayer
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           />
+          <AttributionControl position="bottomleft" />
           {editing && <ClickHandler onPick={(lat, lng) => setPin({ lat, lng })} />}
           {pin && <Marker position={[pin.lat, pin.lng]} icon={pinIcon} />}
           {footprint && (
@@ -100,6 +112,7 @@ export function GeoAnchorMap({
             />
           )}
         </MapContainer>
+        <FloorPicker floors={floors} />
       </div>
 
       <div className="mt-4 space-y-3 border-t border-[var(--color-grid)] pt-3">
