@@ -44,8 +44,10 @@ export default async function FloorPage({
           opensesame
         </Link>
         <span className="font-mono text-xs text-[var(--color-ink-soft)]">
-          {row.facilityName} <span className="text-[var(--color-grid)]">/</span>{" "}
-          {row.floorName}
+          <Link href={`/facilities/${row.facilityId}`} className="hover:text-[var(--color-ink)]">
+            {row.facilityName}
+          </Link>{" "}
+          <span className="text-[var(--color-grid)]">/</span> {row.floorName}
         </span>
       </header>
 
