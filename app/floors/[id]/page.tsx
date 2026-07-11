@@ -4,7 +4,7 @@ import { eq, sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import { floors, facilities, equipmentTypes } from "@/db/schema";
 import { wktPolygonToPoints } from "@/lib/wkt";
-import { FloorPlanCanvas } from "./floor-plan-canvas";
+import { FloorViewSwitcher } from "./floor-view-switcher";
 
 const VIEWBOX_RE = /viewBox="0 0 ([\d.]+) ([\d.]+)"/;
 
@@ -16,6 +16,7 @@ type EquipmentRow = {
   typeName: string;
   widthM: number;
   depthM: number;
+  heightM: number;
 };
 type SafetyEquipmentRow = { id: string; kind: string; x: number; y: number };
 
@@ -47,7 +48,8 @@ export default async function FloorPage({
       db.select().from(equipmentTypes),
       db.execute<EquipmentRow>(sql`
         SELECT e.id, ST_X(e.geom) as x, ST_Y(e.geom) as y,
-               t.name as "typeName", t.width_m as "widthM", t.depth_m as "depthM"
+               t.name as "typeName", t.width_m as "widthM", t.depth_m as "depthM",
+               t.height_m as "heightM"
         FROM equipment e
         JOIN equipment_types t ON t.id = e.equipment_type_id
         WHERE e.floor_id = ${id}
@@ -72,6 +74,7 @@ export default async function FloorPage({
     typeName: r.typeName,
     widthM: r.widthM,
     depthM: r.depthM,
+    heightM: r.heightM,
   }));
   const rooms = roomRows.map((r) => ({
     id: r.id,
@@ -93,6 +96,10 @@ export default async function FloorPage({
   const viewBoxMatch = row.floorPlanSvg?.match(VIEWBOX_RE);
   const viewBoxWidth = viewBoxMatch ? Number(viewBoxMatch[1]) : 100;
   const viewBoxHeight = viewBoxMatch ? Number(viewBoxMatch[2]) : 100;
+  const floorWidthM = row.scaleMetersPerSvgUnit ? viewBoxWidth * row.scaleMetersPerSvgUnit : null;
+  const floorHeightM = row.scaleMetersPerSvgUnit
+    ? viewBoxHeight * row.scaleMetersPerSvgUnit
+    : null;
 
   return (
     <main className="blueprint-grid relative min-h-screen">
@@ -113,13 +120,15 @@ export default async function FloorPage({
 
       <div className="flex min-h-[calc(100vh-57px)] items-center justify-center px-6 py-10">
         {row.floorPlanSvg ? (
-          <FloorPlanCanvas
+          <FloorViewSwitcher
             floorId={row.floorId}
             floorName={row.floorName}
             svgMarkup={row.floorPlanSvg}
             viewBoxWidth={viewBoxWidth}
             viewBoxHeight={viewBoxHeight}
             scaleMetersPerSvgUnit={row.scaleMetersPerSvgUnit}
+            floorWidthM={floorWidthM}
+            floorHeightM={floorHeightM}
             equipmentTypes={allEquipmentTypes}
             placedEquipment={placedEquipment}
             rooms={rooms}
