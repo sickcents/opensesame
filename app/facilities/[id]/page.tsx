@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db/client";
 import { facilities, floors } from "@/db/schema";
 import GeoAnchorMap from "./geo-anchor-map-loader";
+import { AskPanel } from "./ask-panel";
 
 const VIEWBOX_RE = /viewBox="0 0 ([\d.]+) ([\d.]+)"/;
 
@@ -76,6 +77,10 @@ export default async function FacilityPage({
             initialRotationDeg={facility.geoAnchorRotationDeg}
             footprintInput={footprintInput}
           />
+        </div>
+
+        <div className="mt-6">
+          <AskPanel facilityId={facility.id} />
         </div>
 
         {facilityFloors.length > 0 && (
