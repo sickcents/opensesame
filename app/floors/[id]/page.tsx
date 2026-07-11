@@ -3,6 +3,9 @@ import { notFound } from "next/navigation";
 import { eq } from "drizzle-orm";
 import { db } from "@/db/client";
 import { floors, facilities } from "@/db/schema";
+import { FloorPlanCanvas } from "./floor-plan-canvas";
+
+const VIEWBOX_RE = /viewBox="0 0 ([\d.]+) ([\d.]+)"/;
 
 export default async function FloorPage({
   params,
@@ -16,6 +19,7 @@ export default async function FloorPage({
       floorId: floors.id,
       floorName: floors.name,
       floorPlanSvg: floors.floorPlanSvg,
+      scaleMetersPerSvgUnit: floors.scaleMetersPerSvgUnit,
       facilityId: facilities.id,
       facilityName: facilities.name,
     })
@@ -25,6 +29,10 @@ export default async function FloorPage({
     .limit(1);
 
   if (!row) notFound();
+
+  const viewBoxMatch = row.floorPlanSvg?.match(VIEWBOX_RE);
+  const viewBoxWidth = viewBoxMatch ? Number(viewBoxMatch[1]) : 100;
+  const viewBoxHeight = viewBoxMatch ? Number(viewBoxMatch[2]) : 100;
 
   return (
     <main className="blueprint-grid relative min-h-screen">
@@ -43,17 +51,14 @@ export default async function FloorPage({
 
       <div className="flex min-h-[calc(100vh-57px)] items-center justify-center px-6 py-10">
         {row.floorPlanSvg ? (
-          <div className="relative w-full max-w-4xl rounded-sm border border-[var(--color-grid)] bg-[var(--color-panel)] p-4 shadow-sm">
-            <CornerMarks />
-            <div
-              className="[&_svg]:h-auto [&_svg]:max-h-[70vh] [&_svg]:w-full [&_svg]:mx-auto [&_svg_path]:!stroke-[var(--color-ink)]"
-              dangerouslySetInnerHTML={{ __html: row.floorPlanSvg }}
-            />
-            <div className="mt-4 flex items-center justify-between border-t border-[var(--color-grid)] pt-3 font-mono text-xs text-[var(--color-ink-soft)]">
-              <span>scale — not calibrated</span>
-              <span>{row.floorName}</span>
-            </div>
-          </div>
+          <FloorPlanCanvas
+            floorId={row.floorId}
+            floorName={row.floorName}
+            svgMarkup={row.floorPlanSvg}
+            viewBoxWidth={viewBoxWidth}
+            viewBoxHeight={viewBoxHeight}
+            scaleMetersPerSvgUnit={row.scaleMetersPerSvgUnit}
+          />
         ) : (
           <p className="text-sm text-[var(--color-ink-soft)]">
             This Floor has no Floor Plan yet.
@@ -61,18 +66,5 @@ export default async function FloorPage({
         )}
       </div>
     </main>
-  );
-}
-
-function CornerMarks() {
-  const base =
-    "absolute h-3 w-3 border-[var(--color-ink-soft)] pointer-events-none";
-  return (
-    <>
-      <span aria-hidden className={`${base} left-1 top-1 border-t border-l`} />
-      <span aria-hidden className={`${base} right-1 top-1 border-t border-r`} />
-      <span aria-hidden className={`${base} bottom-1 left-1 border-b border-l`} />
-      <span aria-hidden className={`${base} right-1 bottom-1 border-b border-r`} />
-    </>
   );
 }
