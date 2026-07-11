@@ -1,22 +1,35 @@
 import Link from "next/link";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { db } from "@/db/client";
-import { organizations, facilities, floors } from "@/db/schema";
+import { organizations, facilities } from "@/db/schema";
+import WorldMap from "./world-map-loader";
+
+type FirstFloorRow = { facility_id: string; id: string };
 
 async function getOverview() {
   try {
     const [org] = await db.select().from(organizations).limit(1);
     if (!org) return { org: null, facilityRows: [], connected: true as const };
 
-    const facilityRows = await db
-      .select({
-        id: facilities.id,
-        name: facilities.name,
-        firstFloorId: floors.id,
-      })
+    const orgFacilities = await db
+      .select()
       .from(facilities)
-      .leftJoin(floors, eq(floors.facilityId, facilities.id))
       .where(eq(facilities.organizationId, org.id));
+
+    const firstFloors = await db.execute<FirstFloorRow>(sql`
+      SELECT DISTINCT ON (facility_id) facility_id, id
+      FROM floors
+      ORDER BY facility_id, created_at ASC
+    `);
+    const firstFloorByFacility = new Map(firstFloors.map((r) => [r.facility_id, r.id]));
+
+    const facilityRows = orgFacilities.map((f) => ({
+      id: f.id,
+      name: f.name,
+      firstFloorId: firstFloorByFacility.get(f.id) ?? null,
+      lat: f.geoAnchorLat,
+      lng: f.geoAnchorLng,
+    }));
 
     return { org, facilityRows, connected: true as const };
   } catch {
@@ -27,7 +40,12 @@ async function getOverview() {
 export default async function Home() {
   const { org, facilityRows, connected } = await getOverview();
 
-  const facilityCount = new Set(facilityRows.map((f) => f.id)).size;
+  const facilityCount = facilityRows.length;
+  const anchoredFacilities = facilityRows.flatMap((f) =>
+    f.lat != null && f.lng != null
+      ? [{ id: f.id, name: f.name, lat: f.lat, lng: f.lng }]
+      : [],
+  );
 
   return (
     <main className="blueprint-grid relative min-h-screen">
@@ -46,8 +64,8 @@ export default async function Home() {
         </div>
       </header>
 
-      <div className="flex min-h-[calc(100vh-57px)] items-center justify-center px-6">
-        <div className="w-full max-w-md rounded-sm border border-[var(--color-grid)] bg-[var(--color-panel)] p-8 shadow-sm">
+      <div className="flex min-h-[calc(100vh-57px)] items-center justify-center px-6 py-10">
+        <div className="w-full max-w-2xl rounded-sm border border-[var(--color-grid)] bg-[var(--color-panel)] p-8 shadow-sm">
           <svg
             aria-hidden
             width="28"
@@ -75,19 +93,29 @@ export default async function Home() {
               : "This build step scaffolds the schema only — connect DATABASE_URL to see live Organization and Facility data here."}
           </p>
 
+          {anchoredFacilities.length > 0 && (
+            <div className="mt-5">
+              <WorldMap facilities={anchoredFacilities} />
+            </div>
+          )}
+
           {facilityRows.length > 0 && (
             <ul className="mt-5 divide-y divide-[var(--color-grid)] border-t border-[var(--color-grid)]">
               {facilityRows.map((f) => (
-                <li key={f.id} className="py-2.5">
-                  {f.firstFloorId ? (
+                <li key={f.id} className="flex items-center justify-between py-2.5">
+                  <Link
+                    href={`/facilities/${f.id}`}
+                    className="text-sm text-[var(--color-ink)] hover:text-[var(--color-signal)]"
+                  >
+                    {f.name}
+                  </Link>
+                  {f.firstFloorId && (
                     <Link
                       href={`/floors/${f.firstFloorId}`}
-                      className="text-sm text-[var(--color-ink)] hover:text-[var(--color-signal)]"
+                      className="font-mono text-xs text-[var(--color-ink-soft)] hover:text-[var(--color-ink)]"
                     >
-                      {f.name}
+                      view floor →
                     </Link>
-                  ) : (
-                    <span className="text-sm text-[var(--color-ink)]">{f.name}</span>
                   )}
                 </li>
               ))}
