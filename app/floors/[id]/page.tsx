@@ -4,22 +4,39 @@ import { asc, eq, sql } from "drizzle-orm";
 import { db } from "@/db/client";
 import { floors, facilities, equipmentTypes } from "@/db/schema";
 import { wktPolygonToPoints } from "@/lib/wkt";
+import type { AreaKind } from "./actions";
 import { FloorViewSwitcher } from "./floor-view-switcher";
 import { IssuesPanel } from "./issues-panel";
 
 const VIEWBOX_RE = /viewBox="0 0 ([\d.]+) ([\d.]+)"/;
 
-type SpaceRow = { id: string; name: string; wkt: string };
+type SpaceRow = {
+  id: string;
+  name: string;
+  wkt: string;
+  color: string | null;
+  kind?: AreaKind;
+};
 type EquipmentRow = {
   id: string;
+  typeId: string;
   x: number;
   y: number;
+  rotationDeg: number;
+  label: string | null;
+  color: string | null;
   typeName: string;
   widthM: number;
   depthM: number;
   heightM: number;
 };
-type SafetyEquipmentRow = { id: string; kind: string; x: number; y: number };
+type SafetyEquipmentRow = {
+  id: string;
+  kind: string;
+  x: number;
+  y: number;
+  label: string | null;
+};
 type IssueRow = {
   id: string;
   subjectType: string;
@@ -84,21 +101,24 @@ export default async function FloorPage({
         .orderBy(asc(floors.createdAt)),
       db.select().from(equipmentTypes),
       db.execute<EquipmentRow>(sql`
-        SELECT e.id, ST_X(e.geom) as x, ST_Y(e.geom) as y,
+        SELECT e.id, e.equipment_type_id as "typeId",
+               ST_X(e.geom) as x, ST_Y(e.geom) as y,
+               e.rotation_deg as "rotationDeg", e.label, e.color,
                t.name as "typeName", t.width_m as "widthM", t.depth_m as "depthM",
                t.height_m as "heightM"
         FROM equipment e
         JOIN equipment_types t ON t.id = e.equipment_type_id
         WHERE e.floor_id = ${id}
       `),
+      // Creation order matters: array index feeds paletteColorForIndex.
       db.execute<SpaceRow>(
-        sql`SELECT id, name, ST_AsText(geom) as wkt FROM rooms WHERE floor_id = ${id}`,
+        sql`SELECT id, name, ST_AsText(geom) as wkt, color FROM rooms WHERE floor_id = ${id} ORDER BY created_at ASC`,
       ),
       db.execute<SpaceRow>(
-        sql`SELECT id, name, ST_AsText(geom) as wkt FROM areas WHERE floor_id = ${id}`,
+        sql`SELECT id, name, kind, ST_AsText(geom) as wkt, color FROM areas WHERE floor_id = ${id} ORDER BY created_at ASC`,
       ),
       db.execute<SafetyEquipmentRow>(sql`
-        SELECT id, kind, ST_X(geom) as x, ST_Y(geom) as y
+        SELECT id, kind, ST_X(geom) as x, ST_Y(geom) as y, label
         FROM safety_equipment
         WHERE floor_id = ${id}
       `),
@@ -131,8 +151,12 @@ export default async function FloorPage({
 
   const placedEquipment = equipmentRows.map((r) => ({
     id: r.id,
+    typeId: r.typeId,
     xMeters: r.x,
     yMeters: r.y,
+    rotationDeg: r.rotationDeg,
+    label: r.label,
+    color: r.color,
     typeName: r.typeName,
     widthM: r.widthM,
     depthM: r.depthM,
@@ -142,17 +166,21 @@ export default async function FloorPage({
     id: r.id,
     name: r.name,
     points: wktPolygonToPoints(r.wkt),
+    color: r.color,
   }));
   const areas = areaRows.map((r) => ({
     id: r.id,
     name: r.name,
+    kind: r.kind,
     points: wktPolygonToPoints(r.wkt),
+    color: r.color,
   }));
   const safetyEquipment = safetyRows.map((r) => ({
     id: r.id,
     kind: r.kind,
     xMeters: r.x,
     yMeters: r.y,
+    label: r.label,
   }));
 
   const viewBoxMatch = row.floorPlanSvg?.match(VIEWBOX_RE);

@@ -3,6 +3,8 @@
 // subtly wrong — a grid is simple, testable, and good enough for v1
 // facility-scale distances. Pure module: no DB/PostGIS, plain geometry in.
 
+import { rotatePointAround, rotatedRectCorners } from "./rotation";
+
 export type MeterPoint = { x: number; y: number };
 export type WalkablePolygon = { points: MeterPoint[] }; // Room interiors — always walkable
 export type AreaPolygon = {
@@ -10,8 +12,16 @@ export type AreaPolygon = {
   points: MeterPoint[];
   kind: "walkway" | "ppe_required" | "restricted";
 };
-// Equipment footprint, axis-aligned, centered at (x, y).
-export type ObstacleRect = { x: number; y: number; widthM: number; depthM: number };
+// Equipment footprint centered at (x, y). rotationDeg (optional, default 0)
+// rotates it about that center per lib/rotation.ts's CCW convention — the
+// two modules must keep the same rotation direction if either changes.
+export type ObstacleRect = {
+  x: number;
+  y: number;
+  widthM: number;
+  depthM: number;
+  rotationDeg?: number;
+};
 
 export type PathResult = {
   waypoints: MeterPoint[];
@@ -35,7 +45,9 @@ function pointInPolygon(p: MeterPoint, polygon: MeterPoint[]): boolean {
 }
 
 function pointInRect(p: MeterPoint, r: ObstacleRect): boolean {
-  return Math.abs(p.x - r.x) <= r.widthM / 2 && Math.abs(p.y - r.y) <= r.depthM / 2;
+  // Undo the rectangle's rotation so the containment check stays axis-aligned.
+  const local = r.rotationDeg ? rotatePointAround(p, r, -r.rotationDeg) : p;
+  return Math.abs(local.x - r.x) <= r.widthM / 2 && Math.abs(local.y - r.y) <= r.depthM / 2;
 }
 
 /** Array-backed binary min-heap over node indices, keyed by f-score. */
@@ -123,10 +135,14 @@ export function computeWalkingPath(input: {
     }
   }
   for (const r of obstacles) {
-    minX = Math.min(minX, r.x - r.widthM / 2);
-    maxX = Math.max(maxX, r.x + r.widthM / 2);
-    minY = Math.min(minY, r.y - r.depthM / 2);
-    maxY = Math.max(maxY, r.y + r.depthM / 2);
+    // Corners, not width/depth extents — a rotated footprint's bounding box
+    // can exceed the unrotated one.
+    for (const c of rotatedRectCorners({ ...r, rotationDeg: r.rotationDeg ?? 0 })) {
+      minX = Math.min(minX, c.x);
+      maxX = Math.max(maxX, c.x);
+      minY = Math.min(minY, c.y);
+      maxY = Math.max(maxY, c.y);
+    }
   }
   minX -= 1;
   minY -= 1;

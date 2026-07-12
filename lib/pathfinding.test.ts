@@ -82,6 +82,22 @@ describe("computeWalkingPath", () => {
     expect(result!.ppeRequiredAreaIds).toContain("ppe1");
   });
 
+  it("treats a 90-degree-rotated obstacle as its rotated footprint, not the unrotated one", () => {
+    // 12m x 2m bar centered mid-room. Unrotated it's a horizontal band the
+    // endpoints sit inside (they snap out and a path exists along its side);
+    // rotated 90 it's a floor-spanning vertical wall — x in [4, 6], y in
+    // [-1, 11] — that fully separates start from end.
+    const bar = { x: 5, y: 5, widthM: 12, depthM: 2 };
+    const scene = {
+      rooms: [{ points: rect(0, 0, 10, 10) }],
+      areas: [],
+      start: { x: 1, y: 5 },
+      end: { x: 9, y: 5 },
+    };
+    expect(computeWalkingPath({ ...scene, obstacles: [{ ...bar, rotationDeg: 0 }] })).not.toBeNull();
+    expect(computeWalkingPath({ ...scene, obstacles: [{ ...bar, rotationDeg: 90 }] })).toBeNull();
+  });
+
   it("finds a short, roughly-direct path in an empty room", () => {
     const start = { x: 1, y: 1 };
     const end = { x: 9, y: 9 };

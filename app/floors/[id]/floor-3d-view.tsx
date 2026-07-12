@@ -5,6 +5,7 @@ import { Canvas } from "@react-three/fiber";
 import { OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
 import { FloorPicker, type FloorPickerFloor } from "@/app/components/floor-picker";
+import { itemKey } from "./layer-panel";
 
 type Point = { x: number; y: number };
 
@@ -12,13 +13,15 @@ type Equip3D = {
   id: string;
   xMeters: number;
   yMeters: number;
+  rotationDeg: number;
   widthM: number;
   depthM: number;
   heightM: number;
   typeName: string;
+  color: string;
 };
 
-type Space3D = { id: string; name: string; points: Point[] };
+type Space3D = { id: string; name: string; points: Point[]; color: string };
 type Safety3D = { id: string; kind: string; xMeters: number; yMeters: number };
 
 function FlatPolygon({
@@ -55,6 +58,7 @@ export function Floor3DView({
   rooms,
   areas,
   safetyEquipment,
+  hiddenIds,
   floors,
   currentFloorId,
 }: {
@@ -64,10 +68,20 @@ export function Floor3DView({
   rooms: Space3D[];
   areas: Space3D[];
   safetyEquipment: Safety3D[];
+  hiddenIds: ReadonlySet<string>;
   floors: FloorPickerFloor[];
   currentFloorId: string;
 }) {
   const maxSpan = Math.max(floorWidthM, floorHeightM);
+
+  const visibleRooms = rooms.filter((r) => !hiddenIds.has(itemKey({ type: "room", id: r.id })));
+  const visibleAreas = areas.filter((a) => !hiddenIds.has(itemKey({ type: "area", id: a.id })));
+  const visibleEquipment = equipment.filter(
+    (e) => !hiddenIds.has(itemKey({ type: "equipment", id: e.id })),
+  );
+  const visibleSafety = safetyEquipment.filter(
+    (s) => !hiddenIds.has(itemKey({ type: "safety_equipment", id: s.id })),
+  );
 
   return (
     <div className="relative h-[70vh] w-full overflow-hidden rounded-sm border border-[var(--color-grid)] bg-[#eef3f5]">
@@ -91,26 +105,29 @@ export function Floor3DView({
             <meshStandardMaterial color="#ffffff" />
           </mesh>
 
-          {rooms.map((r) => (
-            <FlatPolygon key={r.id} points={r.points} color="#1b4b6b" opacity={0.18} />
+          {visibleRooms.map((r) => (
+            <FlatPolygon key={r.id} points={r.points} color={r.color} opacity={0.18} />
           ))}
-          {areas.map((a) => (
-            <FlatPolygon key={a.id} points={a.points} color="#4c7191" opacity={0.18} />
+          {visibleAreas.map((a) => (
+            <FlatPolygon key={a.id} points={a.points} color={a.color} opacity={0.18} />
           ))}
 
-          {equipment.map((e) => (
+          {visibleEquipment.map((e) => (
             <mesh
               key={e.id}
               position={[e.xMeters, e.heightM / 2, e.yMeters]}
+              // Negated: plan rotation turns +x toward +y (= world +Z), but a
+              // positive three.js Y rotation turns +X toward -Z (right-hand rule).
+              rotation={[0, (-e.rotationDeg * Math.PI) / 180, 0]}
               castShadow
               receiveShadow
             >
               <boxGeometry args={[e.widthM, e.heightM, e.depthM]} />
-              <meshStandardMaterial color="#4c7191" />
+              <meshStandardMaterial color={e.color} />
             </mesh>
           ))}
 
-          {safetyEquipment.map((s) => (
+          {visibleSafety.map((s) => (
             <mesh key={s.id} position={[s.xMeters, 0.02, s.yMeters]} rotation={[-Math.PI / 2, 0, 0]}>
               <circleGeometry args={[Math.max(maxSpan / 60, 0.1), 20]} />
               <meshStandardMaterial color="#e2572b" />
