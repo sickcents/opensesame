@@ -49,6 +49,12 @@ export const departmentEnum = pgEnum("department", [
 
 export const issueStatusEnum = pgEnum("issue_status", ["open", "resolved"]);
 
+// Routing classification for Areas (issue #14). "restricted" covers both
+// "not accessible" and "obstruction" — the router treats them identically.
+// Existing Areas default to "walkway" so no backfill is needed. Rooms get no
+// kind — Room interiors are always walkable in v1.
+export const areaKindEnum = pgEnum("area_kind", ["walkway", "ppe_required", "restricted"]);
+
 export const roleEnum = pgEnum("role", ["editor", "member"]);
 
 // Top-level tenant. All other data is scoped to exactly one Organization.
@@ -186,6 +192,7 @@ export const areas = pgTable("areas", {
     .notNull()
     .references(() => floors.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
+  kind: areaKindEnum("kind").notNull().default("walkway"),
   geom: geometryPolygon("geom").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });

@@ -2,6 +2,8 @@ import { z } from "zod";
 import { tool } from "ai";
 import { sql } from "drizzle-orm";
 import { db } from "@/db/client";
+import { wktPolygonToPoints } from "@/lib/wkt";
+import { computeWalkingPath, type AreaPolygon } from "@/lib/pathfinding";
 
 type SubjectType = "room" | "area" | "equipment" | "safety_equipment";
 
@@ -64,6 +66,26 @@ async function getGeometryWkt(type: SubjectType, id: string): Promise<string | n
             sql`SELECT ST_AsText(geom) as wkt FROM safety_equipment WHERE id = ${id}`,
           ));
   return rows[0]?.wkt ?? null;
+}
+
+/** Routing start/end: polygon subjects route from their centroid, point subjects from their point. */
+async function getRoutingPoint(type: SubjectType, id: string): Promise<{ x: number; y: number } | null> {
+  const rows = await (type === "room"
+    ? db.execute<{ x: number; y: number }>(
+        sql`SELECT ST_X(ST_Centroid(geom)) as x, ST_Y(ST_Centroid(geom)) as y FROM rooms WHERE id = ${id}`,
+      )
+    : type === "area"
+      ? db.execute<{ x: number; y: number }>(
+          sql`SELECT ST_X(ST_Centroid(geom)) as x, ST_Y(ST_Centroid(geom)) as y FROM areas WHERE id = ${id}`,
+        )
+      : type === "equipment"
+        ? db.execute<{ x: number; y: number }>(
+            sql`SELECT ST_X(geom) as x, ST_Y(geom) as y FROM equipment WHERE id = ${id}`,
+          )
+        : db.execute<{ x: number; y: number }>(
+            sql`SELECT ST_X(geom) as x, ST_Y(geom) as y FROM safety_equipment WHERE id = ${id}`,
+          ));
+  return rows[0] ?? null;
 }
 
 /**
@@ -134,6 +156,96 @@ export function createFacilityTools(facilityId: string) {
           itemB: b.label,
           floor: a.floorName,
           distanceMeters: Math.round((rows[0]?.meters ?? 0) * 100) / 100,
+        };
+      },
+    }),
+
+    getWalkingPath: tool({
+      description:
+        "Compute a real walking route between two named items on the same Floor — routed through walkable Areas and Room interiors, avoiding Equipment obstacles and restricted Areas, and flagging any PPE-required Areas crossed. Returns ordered waypoints in real-world meters, total distance, and a routeUrl to view the route on the Floor Plan.",
+      inputSchema: z.object({
+        from: z.string().describe("Name of the starting item, e.g. 'fire extinguisher' or 'Room 101'"),
+        to: z.string().describe("Name of the destination item"),
+      }),
+      execute: async ({ from, to }) => {
+        const [matchesA, matchesB] = await Promise.all([
+          searchSubjects(facilityId, from),
+          searchSubjects(facilityId, to),
+        ]);
+        if (matchesA.length === 0) return { error: `No item found matching "${from}".` };
+        if (matchesB.length === 0) return { error: `No item found matching "${to}".` };
+
+        const a = matchesA[0];
+        const b = matchesB[0];
+        if (a.floorId !== b.floorId) {
+          return {
+            error: `"${a.label}" is on Floor "${a.floorName}" and "${b.label}" is on Floor "${b.floorName}" — a walking route can only be computed between items on the same Floor.`,
+          };
+        }
+
+        const floorId = a.floorId;
+        const [start, end, roomRows, areaRows, equipmentRows] = await Promise.all([
+          getRoutingPoint(a.type, a.id),
+          getRoutingPoint(b.type, b.id),
+          db.execute<{ wkt: string }>(
+            sql`SELECT ST_AsText(geom) as wkt FROM rooms WHERE floor_id = ${floorId}`,
+          ),
+          db.execute<{ id: string; name: string; kind: string; wkt: string }>(
+            sql`SELECT id, name, kind, ST_AsText(geom) as wkt FROM areas WHERE floor_id = ${floorId}`,
+          ),
+          db.execute<{ id: string; x: number; y: number; width_m: number; depth_m: number }>(sql`
+            SELECT e.id, ST_X(e.geom) as x, ST_Y(e.geom) as y, t.width_m, t.depth_m
+            FROM equipment e
+            JOIN equipment_types t ON t.id = e.equipment_type_id
+            WHERE e.floor_id = ${floorId}
+          `),
+        ]);
+        if (!start || !end) return { error: "Could not load geometry for one of the items." };
+
+        // A routed-to/from Equipment's own footprint must not block its own endpoint.
+        const routedEquipmentIds = new Set(
+          [a, b].filter((s) => s.type === "equipment").map((s) => s.id),
+        );
+
+        const result = computeWalkingPath({
+          rooms: roomRows.map((r) => ({ points: wktPolygonToPoints(r.wkt) })),
+          areas: areaRows.map((r) => ({
+            id: r.id,
+            points: wktPolygonToPoints(r.wkt),
+            kind: r.kind as AreaPolygon["kind"],
+          })),
+          obstacles: equipmentRows
+            .filter((e) => !routedEquipmentIds.has(e.id))
+            .map((e) => ({ x: e.x, y: e.y, widthM: e.width_m, depthM: e.depth_m })),
+          start,
+          end,
+        });
+        if (!result) {
+          return {
+            error: `No walkable route exists between "${a.label}" and "${b.label}" — they may be separated by restricted Areas or unmodeled space.`,
+          };
+        }
+
+        const waypoints = result.waypoints.map((p) => ({
+          x: Math.round(p.x * 100) / 100,
+          y: Math.round(p.y * 100) / 100,
+        }));
+        const ppeRequiredAreas = result.ppeRequiredAreaIds
+          .map((id) => areaRows.find((r) => r.id === id)?.name)
+          .filter((n): n is string => !!n);
+        const routeUrl = `/floors/${floorId}?route=${encodeURIComponent(
+          JSON.stringify({ waypoints, ppeAreas: ppeRequiredAreas }),
+        )}`;
+
+        return {
+          from: a.label,
+          to: b.label,
+          floor: a.floorName,
+          floorId,
+          distanceMeters: Math.round(result.distanceMeters * 100) / 100,
+          waypoints,
+          ppeRequiredAreas,
+          routeUrl,
         };
       },
     }),

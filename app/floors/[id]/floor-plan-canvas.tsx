@@ -11,6 +11,7 @@ import {
   type SafetyEquipmentKind,
   type IssueSubjectType,
   type Department,
+  type AreaKind,
 } from "./actions";
 
 type Point = { x: number; y: number };
@@ -56,6 +57,12 @@ const SAFETY_KINDS: { kind: SafetyEquipmentKind; label: string; code: string }[]
 
 const DEPARTMENTS: Department[] = ["IT", "Facilities", "Safety", "Security", "Operations"];
 
+const AREA_KINDS: { kind: AreaKind; label: string }[] = [
+  { kind: "walkway", label: "Walkway" },
+  { kind: "ppe_required", label: "PPE Required" },
+  { kind: "restricted", label: "Restricted" },
+];
+
 type Mode = "idle" | "calibrate" | "equipment" | "room" | "area" | "safety";
 
 export function FloorPlanCanvas({
@@ -71,6 +78,8 @@ export function FloorPlanCanvas({
   rooms,
   areas,
   safetyEquipment,
+  routeWaypoints,
+  routePpeAreas,
 }: {
   floorId: string;
   floorName: string;
@@ -84,6 +93,8 @@ export function FloorPlanCanvas({
   rooms: Space[];
   areas: Space[];
   safetyEquipment: SafetyEquipmentItem[];
+  routeWaypoints: Point[] | null;
+  routePpeAreas: string[];
 }) {
   const [mode, setMode] = useState<Mode>("idle");
   const [points, setPoints] = useState<Point[]>([]);
@@ -92,6 +103,7 @@ export function FloorPlanCanvas({
   const [armedKind, setArmedKind] = useState<SafetyEquipmentKind | null>(null);
   const [spaceStep, setSpaceStep] = useState<"drawing" | "naming">("drawing");
   const [spaceName, setSpaceName] = useState("");
+  const [spaceKind, setSpaceKind] = useState<AreaKind>("walkway");
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -275,6 +287,7 @@ export function FloorPlanCanvas({
     setPoints([]);
     setSpaceStep("drawing");
     setSpaceName("");
+    setSpaceKind("walkway");
     setError(null);
   }
 
@@ -283,6 +296,7 @@ export function FloorPlanCanvas({
     setPoints([]);
     setSpaceStep("drawing");
     setSpaceName("");
+    setSpaceKind("walkway");
     setError(null);
   }
 
@@ -312,7 +326,13 @@ export function FloorPlanCanvas({
     setError(null);
     startTransition(async () => {
       try {
-        await createSpace(floorId, mode as "room" | "area", spaceName, meterPoints);
+        await createSpace(
+          floorId,
+          mode as "room" | "area",
+          spaceName,
+          meterPoints,
+          mode === "area" ? spaceKind : undefined,
+        );
         cancelSpace();
       } catch (err) {
         setError(err instanceof Error ? err.message : "Couldn't save the space.");
@@ -356,6 +376,13 @@ export function FloorPlanCanvas({
       };
     });
   }, [safetyEquipment, scaleMetersPerSvgUnit]);
+
+  const routeSvgPoints = useMemo(() => {
+    if (!scaleMetersPerSvgUnit || !routeWaypoints || routeWaypoints.length < 2) return null;
+    return routeWaypoints
+      .map((p) => `${p.x / scaleMetersPerSvgUnit},${p.y / scaleMetersPerSvgUnit}`)
+      .join(" ");
+  }, [routeWaypoints, scaleMetersPerSvgUnit]);
 
   function toSvgPoints(space: Space) {
     if (!scaleMetersPerSvgUnit) return { poly: "", cx: 0, cy: 0 };
@@ -436,6 +463,12 @@ export function FloorPlanCanvas({
         {mode === "idle" && (
           <p className="mb-2 font-mono text-xs text-[var(--color-ink-soft)]">
             Click a Room, Area, Equipment, or Safety Equipment marker to report an issue.
+          </p>
+        )}
+
+        {routePpeAreas.length > 0 && (
+          <p className="mb-2 font-mono text-xs text-[var(--color-signal)]">
+            PPE required: {routePpeAreas.join(", ")}
           </p>
         )}
 
@@ -553,6 +586,16 @@ export function FloorPlanCanvas({
                 </text>
               </g>
             ))}
+
+            {routeSvgPoints && (
+              <polyline
+                points={routeSvgPoints}
+                fill="none"
+                stroke="#0891b2"
+                strokeWidth={viewBoxWidth / 300}
+                strokeDasharray={`${viewBoxWidth / 100} ${viewBoxWidth / 200}`}
+              />
+            )}
 
             {mode === "calibrate" && (
               <>
@@ -689,6 +732,19 @@ export function FloorPlanCanvas({
                     placeholder={mode === "room" ? "Room 101" : "Loading dock walkway"}
                     className="w-56 rounded-sm border border-[var(--color-grid)] bg-[var(--color-paper)] px-2 py-1 text-sm text-[var(--color-ink)] focus:border-[var(--color-ink)] focus:outline-none"
                   />
+                  {mode === "area" && (
+                    <select
+                      value={spaceKind}
+                      onChange={(e) => setSpaceKind(e.target.value as AreaKind)}
+                      className="rounded-sm border border-[var(--color-grid)] bg-[var(--color-paper)] px-2 py-1 text-sm text-[var(--color-ink)] focus:border-[var(--color-ink)] focus:outline-none"
+                    >
+                      {AREA_KINDS.map(({ kind, label }) => (
+                        <option key={kind} value={kind}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                   <button
                     type="button"
                     onClick={saveSpace}

@@ -20,6 +20,9 @@ export type IssueSubjectType = (typeof ISSUE_SUBJECT_TYPES)[number];
 const DEPARTMENTS = ["IT", "Facilities", "Safety", "Security", "Operations"] as const;
 export type Department = (typeof DEPARTMENTS)[number];
 
+const AREA_KINDS = ["walkway", "ppe_required", "restricted"] as const;
+export type AreaKind = (typeof AREA_KINDS)[number];
+
 export async function setScaleCalibration(
   floorId: string,
   svgDistanceUnits: number,
@@ -78,6 +81,7 @@ export async function createSpace(
   kind: "room" | "area",
   name: string,
   pointsMeters: MeterPoint[],
+  areaKind?: AreaKind,
 ) {
   const trimmedName = name.trim();
   if (!trimmedName) {
@@ -85,6 +89,9 @@ export async function createSpace(
   }
   if (pointsMeters.length < 3) {
     throw new Error("A polygon needs at least 3 points.");
+  }
+  if (areaKind !== undefined && !AREA_KINDS.includes(areaKind)) {
+    throw new Error("Unknown Area kind.");
   }
 
   const wkt = pointsToWktPolygon(pointsMeters);
@@ -96,8 +103,8 @@ export async function createSpace(
     `);
   } else {
     await db.execute(sql`
-      INSERT INTO areas (floor_id, name, geom)
-      VALUES (${floorId}, ${trimmedName}, ST_GeomFromText(${wkt}, 0))
+      INSERT INTO areas (floor_id, name, kind, geom)
+      VALUES (${floorId}, ${trimmedName}, ${areaKind ?? "walkway"}, ST_GeomFromText(${wkt}, 0))
     `);
   }
 

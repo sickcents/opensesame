@@ -1,13 +1,40 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
 
 const EXAMPLES = [
   "How far is the fire extinguisher from the server rack?",
   "What's open in Room 101?",
+  "How do I get from the fire extinguisher to Room 101?",
 ];
+
+const FLOORS_LINK_RE = /\/floors\/[^\s)]+/g;
+
+/** Render answer text with any /floors/… route URL as a clickable link. */
+function MessageText({ text }: { text: string }) {
+  const pieces = text.split(FLOORS_LINK_RE);
+  const links = text.match(FLOORS_LINK_RE) ?? [];
+  return (
+    <>
+      {pieces.map((piece, i) => (
+        <span key={i}>
+          {piece}
+          {links[i] && (
+            <Link
+              href={links[i]}
+              className="underline text-[var(--color-ink)] hover:text-[var(--color-signal)]"
+            >
+              View route
+            </Link>
+          )}
+        </span>
+      ))}
+    </>
+  );
+}
 
 export function AskPanel({ facilityId }: { facilityId: string }) {
   const [input, setInput] = useState("");
@@ -60,7 +87,9 @@ export function AskPanel({ facilityId }: { facilityId: string }) {
                   <span className="font-mono text-xs uppercase tracking-wide text-[var(--color-ink-soft)]">
                     {isUser ? "You" : "Answer"}
                   </span>
-                  <p className="mt-0.5 text-sm text-[var(--color-ink)]">{text}</p>
+                  <p className="mt-0.5 text-sm text-[var(--color-ink)]">
+                    <MessageText text={text} />
+                  </p>
                   {!isUser && text && (
                     <p className="mt-1 font-mono text-xs text-[var(--color-ink-soft)]">
                       ⌐ computed from live PostGIS data
