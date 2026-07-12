@@ -43,6 +43,8 @@ export function FloorViewSwitcher(props: {
   rooms: Space[];
   areas: Space[];
   safetyEquipment: SafetyEquipmentItem[];
+  routeWaypoints: Point[] | null;
+  routePpeAreas: string[];
 }) {
   const [view, setView] = useState<"2d" | "3d">("2d");
   const { floorWidthM, floorHeightM, ...rest } = props;

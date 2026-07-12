@@ -33,10 +33,23 @@ type IssueRow = {
 
 export default async function FloorPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ id: string }>;
+  searchParams: Promise<{ route?: string }>;
 }) {
   const { id } = await params;
+  const { route } = await searchParams;
+
+  // A malformed ?route= query param should never crash the page.
+  let parsedRoute: { waypoints: { x: number; y: number }[]; ppeAreas: string[] } | null = null;
+  if (route) {
+    try {
+      parsedRoute = JSON.parse(decodeURIComponent(route));
+    } catch {
+      parsedRoute = null;
+    }
+  }
 
   const [row] = await db
     .select({
@@ -185,6 +198,8 @@ export default async function FloorPage({
               rooms={rooms}
               areas={areas}
               safetyEquipment={safetyEquipment}
+              routeWaypoints={parsedRoute?.waypoints ?? null}
+              routePpeAreas={parsedRoute?.ppeAreas ?? []}
             />
             <IssuesPanel floorId={row.floorId} issues={issueRows} />
           </>
