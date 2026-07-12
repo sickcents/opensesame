@@ -4,6 +4,7 @@ import {
   text,
   timestamp,
   doublePrecision,
+  integer,
   pgEnum,
   customType,
 } from "drizzle-orm/pg-core";
@@ -138,6 +139,15 @@ export const equipment = pgTable("equipment", {
     .notNull()
     .references(() => equipmentTypes.id, { onDelete: "restrict" }),
   geom: geometryPoint("geom").notNull(),
+  // Degrees CCW about the center point. Constrained to {0, 90, 180, 270} at
+  // the application layer (server action), not a DB enum, so free-angle
+  // rotation can ship later without a schema migration.
+  rotationDeg: integer("rotation_deg").notNull().default(0),
+  // Per-instance rename; null falls back to the type's name.
+  label: text("label"),
+  // 7-char hex override; null falls back to the shared resolver's default
+  // (lib/color-palette.ts) so 2D and 3D can't disagree.
+  color: text("color"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -151,6 +161,9 @@ export const safetyEquipment = pgTable("safety_equipment", {
     .references(() => floors.id, { onDelete: "cascade" }),
   kind: safetyEquipmentKindEnum("kind").notNull(),
   geom: geometryPoint("geom").notNull(),
+  // Per-instance rename; null falls back to the kind's name. Deliberately no
+  // color column — conventional safety iconography isn't user-recolorable.
+  label: text("label"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -181,6 +194,9 @@ export const rooms = pgTable("rooms", {
     .references(() => floors.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
   geom: geometryPolygon("geom").notNull(),
+  // 7-char hex override; null falls back to the shared resolver's default
+  // (lib/color-palette.ts).
+  color: text("color"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
@@ -194,5 +210,8 @@ export const areas = pgTable("areas", {
   name: text("name").notNull(),
   kind: areaKindEnum("kind").notNull().default("walkway"),
   geom: geometryPolygon("geom").notNull(),
+  // 7-char hex override; null falls back to the shared resolver's default
+  // (lib/color-palette.ts).
+  color: text("color"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
