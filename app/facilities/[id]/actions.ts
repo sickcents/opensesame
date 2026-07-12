@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 import { db } from "@/db/client";
 import { facilities } from "@/db/schema";
+import { parseOsmWayId, fetchOsmWayOutline } from "@/lib/osm";
 
 export async function setGeoAnchor(
   facilityId: string,
@@ -31,4 +32,42 @@ export async function setGeoAnchor(
   revalidatePath(`/facilities/${facilityId}`);
 
   return { lat, lng, rotationDeg: normalizedRotation };
+}
+
+export async function setOsmReference(facilityId: string, osmWayId: string) {
+  const wayId = parseOsmWayId(osmWayId);
+  if (!wayId) {
+    throw new Error("Paste an OSM way URL or a numeric way ID.");
+  }
+  const outline = await fetchOsmWayOutline(wayId);
+
+  await db
+    .update(facilities)
+    .set({
+      osmWayId: wayId,
+      osmOutlineGeojson: JSON.stringify(outline),
+    })
+    .where(eq(facilities.id, facilityId));
+
+  revalidatePath(`/facilities/${facilityId}`);
+
+  return { wayId };
+}
+
+export async function setOccupiedPortion(facilityId: string, geojson: object) {
+  await db
+    .update(facilities)
+    .set({ occupiedPortionGeojson: JSON.stringify(geojson) })
+    .where(eq(facilities.id, facilityId));
+
+  revalidatePath(`/facilities/${facilityId}`);
+}
+
+export async function clearOccupiedPortion(facilityId: string) {
+  await db
+    .update(facilities)
+    .set({ occupiedPortionGeojson: null })
+    .where(eq(facilities.id, facilityId));
+
+  revalidatePath(`/facilities/${facilityId}`);
 }
