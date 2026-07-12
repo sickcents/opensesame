@@ -7,4 +7,8 @@ export default defineConfig({
   dbCredentials: {
     url: process.env.DATABASE_URL!,
   },
+  // Without this, drizzle-kit treats PostGIS's own system tables (e.g.
+  // spatial_ref_sys, absent from schema.ts) as orphaned and proposes
+  // dropping them on every push.
+  extensionsFilters: ["postgis"],
 });

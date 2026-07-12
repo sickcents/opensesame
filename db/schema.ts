@@ -73,6 +73,11 @@ export const users = pgTable("users", {
 
 // A Facility's Geo-Anchor (lat/lng + rotation) is set once, shared across
 // all its Floors (ADR-0002). Null until issue #4 (Geo-Anchoring) is done.
+// The OSM reference outline and occupied-portion polygon are lat/lng map
+// annotations for the Geo-Anchor view only — stored as GeoJSON text, not
+// PostGIS geometry, because they aren't the real-world-meters spatial data
+// ADR-0006 governs and nothing queries them spatially. The outline is
+// cached so re-renders don't re-hit Overpass.
 export const facilities = pgTable("facilities", {
   id: uuid("id").primaryKey().defaultRandom(),
   organizationId: uuid("organization_id")
@@ -82,6 +87,9 @@ export const facilities = pgTable("facilities", {
   geoAnchorLat: doublePrecision("geo_anchor_lat"),
   geoAnchorLng: doublePrecision("geo_anchor_lng"),
   geoAnchorRotationDeg: doublePrecision("geo_anchor_rotation_deg"),
+  osmWayId: text("osm_way_id"),
+  osmOutlineGeojson: text("osm_outline_geojson"),
+  occupiedPortionGeojson: text("occupied_portion_geojson"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

@@ -1,6 +1,7 @@
 import postgres from "postgres";
+import { eq } from "drizzle-orm";
 import { db } from "./client";
-import { organizations, equipmentTypes } from "./schema";
+import { organizations, equipmentTypes, facilities } from "./schema";
 
 const DEFAULT_EQUIPMENT_TYPES = [
   { name: "Server Rack", widthM: 0.6, depthM: 1.0, heightM: 2.0 },
@@ -28,6 +29,24 @@ async function main() {
     console.log("Seeded Equipment Type catalog");
   } else {
     console.log("Equipment Type catalog already seeded, skipping");
+  }
+
+  const existingHub = await db
+    .select()
+    .from(facilities)
+    .where(eq(facilities.name, "HUB1"))
+    .limit(1);
+  if (existingHub.length === 0) {
+    const [org] = await db.select().from(organizations).limit(1);
+    // Left unanchored on purpose — Geo-Anchoring is a manual Editor step.
+    await db.insert(facilities).values({
+      organizationId: org.id,
+      name: "HUB1",
+      osmWayId: "198458289",
+    });
+    console.log("Seeded HUB1 facility");
+  } else {
+    console.log("HUB1 facility already seeded, skipping");
   }
 }
 

@@ -30,6 +30,34 @@ export function rotateEastNorth(east: number, north: number, bearingDeg: number)
  * its SVG (0,0) origin pinned there. SVG +x maps to east, SVG +y maps to
  * south, before the compass rotation is applied.
  */
+export type FitBoundsResult =
+  | { kind: "bounds"; points: [number, number][] }
+  | { kind: "view"; center: [number, number]; zoom: number };
+
+/**
+ * Points ([lat, lng]) to fit the Geo-Anchor map to, taking the
+ * highest-priority reference geometry available: occupied portion, then
+ * OSM outline, then Floor-Plan footprint. Falls back to a fixed view on
+ * the pin (zoom 18) or the world (zoom 2) when no geometry exists.
+ */
+export function computeFitBounds({
+  occupiedPortion,
+  osmOutline,
+  floorPlanFootprint,
+  pin,
+}: {
+  occupiedPortion: [number, number][] | null;
+  osmOutline: [number, number][] | null;
+  floorPlanFootprint: [number, number][] | null;
+  pin: { lat: number; lng: number } | null;
+}): FitBoundsResult {
+  for (const points of [occupiedPortion, osmOutline, floorPlanFootprint]) {
+    if (points && points.length > 0) return { kind: "bounds", points };
+  }
+  if (pin) return { kind: "view", center: [pin.lat, pin.lng], zoom: 18 };
+  return { kind: "view", center: [20, 0], zoom: 2 };
+}
+
 export function floorPlanFootprint({
   lat,
   lng,

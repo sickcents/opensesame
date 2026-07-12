@@ -78,6 +78,9 @@ export default async function FacilityPage({
             initialRotationDeg={facility.geoAnchorRotationDeg}
             footprintInput={footprintInput}
             floors={facilityFloors}
+            osmWayId={facility.osmWayId}
+            osmOutlineGeojson={facility.osmOutlineGeojson}
+            occupiedPortionGeojson={facility.occupiedPortionGeojson}
           />
         </div>
 
