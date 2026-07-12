@@ -13,3 +13,4 @@
 [10] Issue reporting and resolution workflow - DONE
 [11] Gemini structured spatial query tools - DONE
 [12] Floor picker as a map-overlay control - DONE (also added the repo's first test setup: Vitest + RTL, per issue #12's testing decisions)
+[13] OSM building reference overlay, occupied-portion segmentation, and reanchor auto-zoom - DONE (also fixed a latent drizzle-kit db:push data-loss trap: missing extensionsFilters was proposing to drop PostGIS's spatial_ref_sys table)
