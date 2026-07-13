@@ -13,8 +13,37 @@ const EXAMPLES = [
 
 const FLOORS_LINK_RE = /\/floors\/[^\s)]+/g;
 
-/** Render answer text with any /floors/… route URL as a clickable link. */
-function MessageText({ text }: { text: string }) {
+type Point = { x: number; y: number };
+
+/** Parse a routeUrl of the form `/floors/{floorId}?route=<json>` back into its parts. */
+function parseRouteUrl(
+  url: string,
+): { floorId: string; waypoints: Point[]; ppeAreas: string[] } | null {
+  const match = url.match(/^\/floors\/([^/?]+)\?route=(.+)$/);
+  if (!match) return null;
+  try {
+    const parsed = JSON.parse(decodeURIComponent(match[2]));
+    return { floorId: match[1], waypoints: parsed.waypoints ?? [], ppeAreas: parsed.ppeAreas ?? [] };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Render answer text with any /floors/… route URL as a clickable link.
+ * When the link points at the Floor the chat is currently open on,
+ * intercept the click and hand the route to `onRouteReady` instead of
+ * navigating — that way the drawer stays open and chat state survives.
+ */
+function MessageText({
+  text,
+  currentFloorId,
+  onRouteReady,
+}: {
+  text: string;
+  currentFloorId?: string;
+  onRouteReady?: (floorId: string, waypoints: Point[], ppeAreas: string[]) => void;
+}) {
   const pieces = text.split(FLOORS_LINK_RE);
   const links = text.match(FLOORS_LINK_RE) ?? [];
   return (
@@ -25,6 +54,13 @@ function MessageText({ text }: { text: string }) {
           {links[i] && (
             <Link
               href={links[i]}
+              onClick={(e) => {
+                const route = parseRouteUrl(links[i]);
+                if (route && onRouteReady && route.floorId === currentFloorId) {
+                  e.preventDefault();
+                  onRouteReady(route.floorId, route.waypoints, route.ppeAreas);
+                }
+              }}
               className="underline text-[var(--color-ink)] hover:text-[var(--color-signal)]"
             >
               View route
@@ -36,7 +72,15 @@ function MessageText({ text }: { text: string }) {
   );
 }
 
-export function AskPanel({ facilityId }: { facilityId: string }) {
+export function AskPanel({
+  facilityId,
+  currentFloorId,
+  onRouteReady,
+}: {
+  facilityId: string;
+  currentFloorId?: string;
+  onRouteReady?: (floorId: string, waypoints: Point[], ppeAreas: string[]) => void;
+}) {
   const [input, setInput] = useState("");
   const { messages, sendMessage, status } = useChat({
     transport: new DefaultChatTransport({ api: `/api/facilities/${facilityId}/chat` }),
@@ -88,7 +132,11 @@ export function AskPanel({ facilityId }: { facilityId: string }) {
                     {isUser ? "You" : "Answer"}
                   </span>
                   <p className="mt-0.5 text-sm text-[var(--color-ink)]">
-                    <MessageText text={text} />
+                    <MessageText
+                      text={text}
+                      currentFloorId={currentFloorId}
+                      onRouteReady={onRouteReady}
+                    />
                   </p>
                   {!isUser && text && (
                     <p className="mt-1 font-mono text-xs text-[var(--color-ink-soft)]">

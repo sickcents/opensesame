@@ -212,6 +212,7 @@ export default async function FloorPage({
       <div className="flex min-h-[calc(100vh-57px)] flex-col items-center gap-8 px-6 py-10">
         {row.floorPlanSvg ? (
           <FloorWorkspace
+            facilityId={row.facilityId}
             floorId={row.floorId}
             floorName={row.floorName}
             floors={siblingFloors}
