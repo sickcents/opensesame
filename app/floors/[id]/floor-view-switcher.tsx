@@ -163,6 +163,8 @@ export function FloorViewSwitcher(props: {
           hiddenIds={hiddenIds}
           floors={rest.floors}
           currentFloorId={rest.floorId}
+          routeWaypoints={rest.routeWaypoints}
+          routePpeAreas={rest.routePpeAreas}
         />
       )}
     </div>

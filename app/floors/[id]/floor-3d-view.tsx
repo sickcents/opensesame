@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { Canvas } from "@react-three/fiber";
-import { OrbitControls } from "@react-three/drei";
+import { Line, OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
 import { FloorPicker, type FloorPickerFloor } from "@/app/components/floor-picker";
 import { itemKey, type ItemRef } from "./layer-panel";
@@ -75,6 +75,8 @@ export function Floor3DView({
   floors,
   currentFloorId,
   highlightRef = null,
+  routeWaypoints = null,
+  routePpeAreas = [],
 }: {
   floorWidthM: number;
   floorHeightM: number;
@@ -87,6 +89,10 @@ export function Floor3DView({
   currentFloorId: string;
   // Issue-subject highlight (owned by FloorWorkspace) — emissive tint only.
   highlightRef?: ItemRef | null;
+  // Chat-computed walking route (owned by FloorWorkspace) — same data the
+  // 2D canvas draws, just projected into world space here.
+  routeWaypoints?: Point[] | null;
+  routePpeAreas?: string[];
 }) {
   const maxSpan = Math.max(floorWidthM, floorHeightM);
   const highlightKey = highlightRef ? itemKey(highlightRef) : null;
@@ -99,6 +105,13 @@ export function Floor3DView({
   const visibleSafety = safetyEquipment.filter(
     (s) => !hiddenIds.has(itemKey({ type: "safety_equipment", id: s.id })),
   );
+
+  // Same [x, y=const, z=yMeters] convention as Equipment/Safety Equipment
+  // above, just elevated slightly higher so the line draws over markers.
+  const routeLinePoints: [number, number, number][] | null =
+    routeWaypoints && routeWaypoints.length >= 2
+      ? routeWaypoints.map((p) => [p.x, 0.03, p.y])
+      : null;
 
   return (
     <div className="relative h-[70vh] w-full overflow-hidden rounded-sm border border-[var(--color-grid)] bg-[#eef3f5]">
@@ -182,10 +195,27 @@ export function Floor3DView({
               />
             </mesh>
           ))}
+
+          {routeLinePoints && (
+            <Line
+              points={routeLinePoints}
+              color="#0891b2"
+              lineWidth={2}
+              dashed
+              dashScale={4}
+              dashSize={1}
+              gapSize={0.6}
+            />
+          )}
         </group>
 
         <OrbitControls makeDefault />
       </Canvas>
+      {routePpeAreas.length > 0 && (
+        <p className="absolute top-2 left-2 rounded-sm bg-[var(--color-paper)]/90 px-2 py-1 font-mono text-xs text-[var(--color-signal)]">
+          PPE required: {routePpeAreas.join(", ")}
+        </p>
+      )}
       <FloorPicker floors={floors} currentFloorId={currentFloorId} />
     </div>
   );

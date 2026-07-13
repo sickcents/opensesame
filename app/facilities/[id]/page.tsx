@@ -4,7 +4,7 @@ import { asc, eq } from "drizzle-orm";
 import { db } from "@/db/client";
 import { facilities, floors } from "@/db/schema";
 import GeoAnchorMap from "./geo-anchor-map-loader";
-import { AskPanel } from "./ask-panel";
+import { AskPanel } from "@/app/components/ask-panel";
 
 const VIEWBOX_RE = /viewBox="0 0 ([\d.]+) ([\d.]+)"/;
 
