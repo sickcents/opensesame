@@ -43,10 +43,18 @@ export async function fetchOsmWayOutline(wayId: string): Promise<GeoJsonPolygon>
   const res = await fetch(OVERPASS_ENDPOINT, {
     method: "POST",
     body: `data=${encodeURIComponent(buildOverpassQuery(wayId))}`,
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    headers: {
+      "Content-Type": "application/x-www-form-urlencoded",
+      Accept: "application/json",
+      "User-Agent": "OpenSesame Facility Mapper (https://github.com/sickcents/opensesame)",
+    },
   });
   if (!res.ok) {
-    throw new Error(`Couldn't reach the Overpass API (HTTP ${res.status}).`);
+    const bodyText = await res.text().catch(() => "");
+    const detail = bodyText.trim().slice(0, 200);
+    throw new Error(
+      `Couldn't reach the Overpass API (HTTP ${res.status}).${detail ? ` ${detail}` : ""}`,
+    );
   }
   let json: OverpassResponse;
   try {

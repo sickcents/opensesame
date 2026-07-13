@@ -115,8 +115,37 @@ describe("fetchOsmWayOutline", () => {
   });
 
   it("throws a clear error when the Overpass API responds with an error status", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, status: 504 }));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ ok: false, status: 504, text: async () => "" }),
+    );
     await expect(fetchOsmWayOutline("198458289")).rejects.toThrow(/Overpass/);
+  });
+
+  it("includes the response body text in the error when Overpass rejects the request", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({
+        ok: false,
+        status: 406,
+        text: async () => "Not Acceptable",
+      }),
+    );
+    await expect(fetchOsmWayOutline("198458289")).rejects.toThrow(/Not Acceptable/);
+  });
+
+  it("sends Accept and User-Agent headers so Overpass doesn't reject the request", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => validResponse,
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await fetchOsmWayOutline("198458289");
+
+    const [, init] = fetchMock.mock.calls[0];
+    expect(init.headers.Accept).toBe("application/json");
+    expect(init.headers["User-Agent"]).toBeTruthy();
   });
 
   it("throws a clear error when the response body is not JSON", async () => {
