@@ -19,6 +19,7 @@ import { FloorPicker, type FloorPickerFloor } from "@/app/components/floor-picke
 import {
   setGeoAnchor,
   setOsmReference,
+  findNearestOsmWay,
   setOccupiedPortion,
   clearOccupiedPortion,
 } from "./actions";
@@ -32,6 +33,13 @@ const pinIcon = L.divIcon({
 
 const OSM_OUTLINE_STYLE = { color: "#6b7280", weight: 2, dashArray: "6 4", fillOpacity: 0 };
 const OCCUPIED_STYLE = { color: "#c026d3", weight: 2, fillColor: "#c026d3", fillOpacity: 0.25 };
+const WAY_PREVIEW_STYLE = {
+  color: "#f59e0b",
+  weight: 2,
+  dashArray: "4 3",
+  fillColor: "#f59e0b",
+  fillOpacity: 0.2,
+};
 
 function ClickHandler({ onPick }: { onPick: (lat: number, lng: number) => void }) {
   useMapEvents({
@@ -105,6 +113,12 @@ export function GeoAnchorMap({
   const [wayInput, setWayInput] = useState(osmWayId ?? "");
   const [drawing, setDrawing] = useState(false);
   const [drawPoints, setDrawPoints] = useState<[number, number][]>([]);
+  const [pickingWay, setPickingWay] = useState(false);
+  const [wayPreview, setWayPreview] = useState<{
+    wayId: string;
+    outlineLatLngs: [number, number][];
+  } | null>(null);
+  const [wayPickMessage, setWayPickMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const [isOsmPending, startOsmTransition] = useTransition();
@@ -160,6 +174,7 @@ export function GeoAnchorMap({
   }
 
   function startDrawingOccupied() {
+    cancelWayPick();
     setDrawing(true);
     setDrawPoints([]);
     setError(null);
@@ -169,6 +184,61 @@ export function GeoAnchorMap({
     setDrawing(false);
     setDrawPoints([]);
     setError(null);
+  }
+
+  function startPickingWay() {
+    cancelDrawing();
+    setWayPreview(null);
+    setWayPickMessage("Click a building on the map to find its OSM way.");
+    setError(null);
+    setPickingWay(true);
+  }
+
+  function cancelWayPick() {
+    setPickingWay(false);
+    setWayPreview(null);
+    setWayPickMessage(null);
+  }
+
+  function pickWayAt(lat: number, lng: number) {
+    setError(null);
+    setWayPreview(null);
+    setWayPickMessage("Searching for a nearby building…");
+    startOsmTransition(async () => {
+      try {
+        const result = await findNearestOsmWay(lat, lng);
+        if (!result) {
+          setWayPickMessage(
+            "No building found near that point — try clicking closer to a building outline.",
+          );
+          return;
+        }
+        setWayPreview({
+          wayId: result.wayId,
+          outlineLatLngs: result.outline.coordinates[0].map(
+            ([wayLng, wayLat]) => [wayLat, wayLng] as [number, number],
+          ),
+        });
+        setWayPickMessage(`Found way ${result.wayId} — confirm to attach it.`);
+      } catch (err) {
+        setWayPickMessage(null);
+        setError(err instanceof Error ? err.message : "Couldn't search for a nearby building.");
+      }
+    });
+  }
+
+  function confirmWayPick() {
+    if (!wayPreview) return;
+    setError(null);
+    startOsmTransition(async () => {
+      try {
+        await setOsmReference(facilityId, wayPreview.wayId);
+        setWayInput(wayPreview.wayId);
+        cancelWayPick();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Couldn't fetch the OSM outline.");
+      }
+    });
   }
 
   function finishOccupiedPortion() {
@@ -230,6 +300,8 @@ export function GeoAnchorMap({
               onPick={(lat, lng) => {
                 if (drawing) {
                   setDrawPoints((pts) => [...pts, [lat, lng]]);
+                } else if (pickingWay) {
+                  pickWayAt(lat, lng);
                 } else {
                   setPin({ lat, lng });
                 }
@@ -238,6 +310,9 @@ export function GeoAnchorMap({
           )}
           {pin && <Marker position={[pin.lat, pin.lng]} icon={pinIcon} />}
           {osmOutline && <Polygon positions={osmOutline} pathOptions={OSM_OUTLINE_STYLE} />}
+          {wayPreview && (
+            <Polygon positions={wayPreview.outlineLatLngs} pathOptions={WAY_PREVIEW_STYLE} />
+          )}
           {occupiedPortion && (
             <Polygon positions={occupiedPortion} pathOptions={OCCUPIED_STYLE} />
           )}
@@ -279,9 +354,11 @@ export function GeoAnchorMap({
             <p className="font-mono text-xs text-[var(--color-ink-soft)]">
               {drawing
                 ? `Click the map to outline the occupied portion (${drawPoints.length} picked).`
-                : pin
-                  ? `pin — ${pin.lat.toFixed(5)}, ${pin.lng.toFixed(5)}`
-                  : "Click the map to drop a pin at the Facility's real-world location."}
+                : pickingWay
+                  ? (wayPickMessage ?? "Click a building on the map to find its OSM way.")
+                  : pin
+                    ? `pin — ${pin.lat.toFixed(5)}, ${pin.lng.toFixed(5)}`
+                    : "Click the map to drop a pin at the Facility's real-world location."}
             </p>
             <div className="flex items-center gap-3">
               <label htmlFor="rotation" className="font-mono text-xs text-[var(--color-ink-soft)]">
@@ -320,6 +397,37 @@ export function GeoAnchorMap({
               >
                 {isOsmPending ? "Fetching…" : osmWayId ? "Update outline" : "Attach outline"}
               </button>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                onClick={pickingWay ? cancelWayPick : startPickingWay}
+                className="font-mono text-xs text-[var(--color-ink-soft)] hover:text-[var(--color-ink)]"
+              >
+                {pickingWay ? "Cancel picking" : "Pick building on map"}
+              </button>
+              {wayPreview && (
+                <>
+                  <span className="font-mono text-xs text-[var(--color-ink-soft)]">
+                    way {wayPreview.wayId} previewed on the map
+                  </span>
+                  <button
+                    type="button"
+                    onClick={confirmWayPick}
+                    disabled={isOsmPending}
+                    className="rounded-sm bg-[var(--color-ink)] px-3 py-1 font-mono text-xs text-[var(--color-paper)] disabled:opacity-60"
+                  >
+                    {isOsmPending ? "Attaching…" : "Attach this way"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setWayPreview(null)}
+                    className="font-mono text-xs text-[var(--color-ink-soft)] hover:text-[var(--color-ink)]"
+                  >
+                    Discard
+                  </button>
+                </>
+              )}
             </div>
             {drawing ? (
               <div className="flex flex-wrap items-center gap-3">
