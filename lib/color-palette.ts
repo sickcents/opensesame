@@ -33,6 +33,12 @@ export const AREA_DEFAULT_COLOR = "#9aa0a6";
 // Default Equipment fill until equipment_types grow a per-type color column.
 export const EQUIPMENT_DEFAULT_COLOR = "#4c7191";
 
+// Exit safety-equipment marker fill (2D + 3D). Deliberately saturated —
+// standard "exit sign" green — so it reads clearly against both the muted
+// COLOR_PALETTE hues above and the orange --color-signal safety/selection
+// accent used elsewhere, rather than blending in with either.
+export const EXIT_GREEN = "#15803d";
+
 /**
  * item.color if set, else the type-appropriate default. Single shared
  * resolver so 2D SVG fill/stroke and 3D material color can never disagree:

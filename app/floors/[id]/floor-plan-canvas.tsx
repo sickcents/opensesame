@@ -11,6 +11,7 @@ import {
   type ReactNode,
 } from "react";
 import { FloorPicker, type FloorPickerFloor } from "@/app/components/floor-picker";
+import { EXIT_GREEN } from "@/lib/color-palette";
 import {
   normalizeRotation90,
   rotate90,
@@ -669,6 +670,7 @@ export function FloorPlanCanvas({
       const info = SAFETY_KINDS.find((k) => k.kind === s.kind);
       return {
         id: s.id,
+        kind: s.kind,
         cx: s.xMeters / scaleMetersPerSvgUnit,
         cy: s.yMeters / scaleMetersPerSvgUnit,
         code: info?.code ?? "?",
@@ -1790,7 +1792,17 @@ export function FloorPlanCanvas({
                   }}
                   className={`${toolButtonClass(tool === "safety" && armedKind === kind)} w-full text-left`}
                 >
-                  ● {label}
+                  {kind === "exit" ? (
+                    <span
+                      className="mr-1.5 inline-block rounded-[2px] px-1 py-0.5 align-middle text-[9px] font-bold text-white"
+                      style={{ backgroundColor: EXIT_GREEN }}
+                    >
+                      EXIT
+                    </span>
+                  ) : (
+                    "● "
+                  )}
+                  {label}
                 </button>
               ))
             }
@@ -1990,33 +2002,61 @@ export function FloorPlanCanvas({
                 </g>
               ))}
 
-              {safetyShapes.map((s) => (
-                <g
-                  key={s.id}
-                  transform={moveTransformFor({ type: "safety_equipment", id: s.id })}
-                  {...subjectClickProps("safety_equipment", s.id, s.label)}
-                >
-                  <circle
-                    cx={s.cx}
-                    cy={s.cy}
-                    r={safetyRadius}
-                    fill="var(--color-panel)"
-                    stroke="var(--color-signal)"
-                    strokeWidth={viewBoxWidth / 400}
-                  />
-                  <text
-                    x={s.cx}
-                    y={s.cy}
-                    textAnchor="middle"
-                    dominantBaseline="middle"
-                    fontSize={viewBoxWidth / 110}
-                    fill="var(--color-signal)"
-                    className="select-none font-mono font-bold"
+              {safetyShapes.map((s) =>
+                s.kind === "exit" ? (
+                  <g
+                    key={s.id}
+                    transform={moveTransformFor({ type: "safety_equipment", id: s.id })}
+                    {...subjectClickProps("safety_equipment", s.id, s.label)}
                   >
-                    {s.code}
-                  </text>
-                </g>
-              ))}
+                    <rect
+                      x={s.cx - safetyRadius * 1.6}
+                      y={s.cy - safetyRadius * 0.9}
+                      width={safetyRadius * 3.2}
+                      height={safetyRadius * 1.8}
+                      rx={viewBoxWidth / 700}
+                      fill={EXIT_GREEN}
+                    />
+                    <text
+                      x={s.cx}
+                      y={s.cy}
+                      textAnchor="middle"
+                      dominantBaseline="middle"
+                      fontSize={viewBoxWidth / 190}
+                      fill="#ffffff"
+                      className="select-none font-mono font-bold"
+                    >
+                      EXIT
+                    </text>
+                  </g>
+                ) : (
+                  <g
+                    key={s.id}
+                    transform={moveTransformFor({ type: "safety_equipment", id: s.id })}
+                    {...subjectClickProps("safety_equipment", s.id, s.label)}
+                  >
+                    <circle
+                      cx={s.cx}
+                      cy={s.cy}
+                      r={safetyRadius}
+                      fill="var(--color-panel)"
+                      stroke="var(--color-signal)"
+                      strokeWidth={viewBoxWidth / 400}
+                    />
+                    <text
+                      x={s.cx}
+                      y={s.cy}
+                      textAnchor="middle"
+                      dominantBaseline="middle"
+                      fontSize={viewBoxWidth / 110}
+                      fill="var(--color-signal)"
+                      className="select-none font-mono font-bold"
+                    >
+                      {s.code}
+                    </text>
+                  </g>
+                ),
+              )}
 
               {routeSvgPoints && (
                 <polyline
