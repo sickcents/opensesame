@@ -13,9 +13,11 @@ import {
 import { FloorPicker, type FloorPickerFloor } from "@/app/components/floor-picker";
 import {
   normalizeRotation90,
+  rotate90,
   rotatePointAround,
   rotatedRectCorners,
   svgRotateTransform,
+  type RotationDirection,
 } from "@/lib/rotation";
 import { pickNiceInterval } from "@/lib/ruler";
 import { isNearPoint, isSelfIntersecting } from "@/lib/polygon";
@@ -1448,14 +1450,14 @@ export function FloorPlanCanvas({
     });
   }
 
-  function rotateSelectedEquipment() {
+  function rotateSelectedEquipment(direction: RotationDirection = "cw") {
     const item =
       selectedItems.length === 1 && selectedItems[0].type === "equipment"
         ? selectedItems[0]
         : null;
     if (!item) return;
     const before = normalizeRotation90(item.rotationDeg ?? 0);
-    const next = normalizeRotation90(before + 90);
+    const next = rotate90(before, direction);
     startTransition(async () => {
       try {
         await rotateEquipment(floorId, item.id, next);
@@ -1577,7 +1579,9 @@ export function FloorPlanCanvas({
       if (e.key === "r" || e.key === "R") {
         if (selectedItems.length === 1 && selectedItems[0].type === "equipment") {
           e.preventDefault();
-          rotateSelectedEquipment();
+          // e.key is uppercase whenever Shift is held, regardless of Caps
+          // Lock, so check e.shiftKey directly to tell R from Shift+R.
+          rotateSelectedEquipment(e.shiftKey ? "ccw" : "cw");
         }
         return;
       }
