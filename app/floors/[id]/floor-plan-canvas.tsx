@@ -204,6 +204,7 @@ export function FloorPlanCanvas({
   routePpeAreas,
   hiddenIds,
   onHiddenIdsChange,
+  highlightRef = null,
 }: {
   floorId: string;
   floorName: string;
@@ -223,6 +224,10 @@ export function FloorPlanCanvas({
   // the same set. Keyed by layer-panel itemKey (`${type}:${id}`).
   hiddenIds: ReadonlySet<string>;
   onHiddenIdsChange: (next: Set<string>) => void;
+  // Issue-subject highlight from the Issues panel (owned by FloorWorkspace).
+  // Deliberately separate from the edit-mode `selection` state: it renders in
+  // every canvas state and drives no edit interactions.
+  highlightRef?: ItemRef | null;
 }) {
   const [canvasState, setCanvasState] = useState<CanvasState>("view");
   const [tool, setTool] = useState<Tool>("select");
@@ -2089,6 +2094,29 @@ export function FloorPlanCanvas({
                     </g>
                   );
                 })}
+
+              {/* Issue-subject highlight (from the Issues panel). Always
+                  visible regardless of canvasState; same visual approach as
+                  the edit selection outline but read-only — no corner
+                  handles, never feeds edit interactions. */}
+              {highlightRef &&
+                (() => {
+                  const pts = itemBoundsPoints(highlightRef);
+                  if (pts.length === 0) return null;
+                  const box = bboxOf(pts);
+                  return (
+                    <rect
+                      x={box.minX}
+                      y={box.minY}
+                      width={box.maxX - box.minX}
+                      height={box.maxY - box.minY}
+                      fill="none"
+                      stroke={SELECTION_COLOR}
+                      strokeWidth={selectionStroke}
+                      pointerEvents="none"
+                    />
+                  );
+                })()}
 
               {marquee && (
                 <rect

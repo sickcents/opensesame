@@ -6,6 +6,7 @@ import { effectiveColor, EQUIPMENT_DEFAULT_COLOR } from "@/lib/color-palette";
 import type { AreaKind } from "./actions";
 import { FloorPlanCanvas } from "./floor-plan-canvas";
 import Floor3DView from "./floor-3d-view-loader";
+import type { ItemRef } from "./layer-panel";
 
 type Point = { x: number; y: number };
 
@@ -63,13 +64,15 @@ export function FloorViewSwitcher(props: {
   safetyEquipment: SafetyEquipmentItem[];
   routeWaypoints: Point[] | null;
   routePpeAreas: string[];
+  // Issue-subject highlight owned by FloorWorkspace; read-only for both views.
+  highlightRef?: ItemRef | null;
 }) {
   const [view, setView] = useState<"2d" | "3d">("2d");
   // Session-only visibility, keyed `${type}:${id}` (layer-panel itemKey).
   // Lives here — the one place both views branch from — so 2D and 3D can
   // never disagree about what's hidden.
   const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set());
-  const { floorWidthM, floorHeightM, ...rest } = props;
+  const { floorWidthM, floorHeightM, highlightRef, ...rest } = props;
   const canShow3D = !!floorWidthM && !!floorHeightM;
 
   // Single effectiveColor resolution point: both views receive final hex
@@ -146,9 +149,11 @@ export function FloorViewSwitcher(props: {
           placedEquipment={resolvedEquipment}
           hiddenIds={hiddenIds}
           onHiddenIdsChange={setHiddenIds}
+          highlightRef={highlightRef ?? null}
         />
       ) : (
         <Floor3DView
+          highlightRef={highlightRef ?? null}
           floorWidthM={floorWidthM}
           floorHeightM={floorHeightM}
           equipment={resolvedEquipment}
