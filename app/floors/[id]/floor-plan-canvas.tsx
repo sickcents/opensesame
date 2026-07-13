@@ -8,6 +8,7 @@ import {
   useTransition,
   type MouseEvent,
   type PointerEvent,
+  type ReactNode,
 } from "react";
 import { FloorPicker, type FloorPickerFloor } from "@/app/components/floor-picker";
 import {
@@ -1713,51 +1714,83 @@ export function FloorPlanCanvas({
           >
             Select
           </button>
+          <span className="mx-1 text-[var(--color-grid)]">|</span>
           {equipmentTypes.length > 0 && (
-            <>
-              <span className="mx-1 text-[var(--color-grid)]">|</span>
-              {equipmentTypes.map((t) => (
+            <ToolbarGroupMenu
+              label="Equipment"
+              active={tool === "equipment"}
+              disabled={!scaleMetersPerSvgUnit}
+              buttonClassName={toolButtonClass}
+            >
+              {(close) =>
+                equipmentTypes.map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    disabled={!scaleMetersPerSvgUnit}
+                    onClick={() => {
+                      toggleArmedType(t.id);
+                      close();
+                    }}
+                    title={
+                      scaleMetersPerSvgUnit
+                        ? `${t.widthM}m x ${t.depthM}m x ${t.heightM}m`
+                        : "Calibrate the Floor's scale first"
+                    }
+                    className={toolButtonClass(tool === "equipment" && armedTypeId === t.id)}
+                  >
+                    + {t.name}
+                  </button>
+                ))
+              }
+            </ToolbarGroupMenu>
+          )}
+          <ToolbarGroupMenu
+            label="Draw"
+            active={tool === "room" || tool === "area"}
+            disabled={!scaleMetersPerSvgUnit}
+            buttonClassName={toolButtonClass}
+          >
+            {(close) =>
+              (["room", "area"] as const).map((kind) => (
                 <button
-                  key={t.id}
+                  key={kind}
                   type="button"
                   disabled={!scaleMetersPerSvgUnit}
-                  onClick={() => toggleArmedType(t.id)}
-                  title={
-                    scaleMetersPerSvgUnit
-                      ? `${t.widthM}m x ${t.depthM}m x ${t.heightM}m`
-                      : "Calibrate the Floor's scale first"
-                  }
-                  className={toolButtonClass(tool === "equipment" && armedTypeId === t.id)}
+                  onClick={() => {
+                    startDrawingSpace(kind);
+                    close();
+                  }}
+                  className={`${toolButtonClass(tool === kind)} w-full text-left capitalize`}
                 >
-                  + {t.name}
+                  ▱ Draw {kind}
                 </button>
-              ))}
-            </>
-          )}
-          <span className="mx-1 text-[var(--color-grid)]">|</span>
-          {(["room", "area"] as const).map((kind) => (
-            <button
-              key={kind}
-              type="button"
-              disabled={!scaleMetersPerSvgUnit}
-              onClick={() => startDrawingSpace(kind)}
-              className={`${toolButtonClass(tool === kind)} capitalize`}
-            >
-              ▱ Draw {kind}
-            </button>
-          ))}
-          <span className="mx-1 text-[var(--color-grid)]">|</span>
-          {SAFETY_KINDS.map(({ kind, label }) => (
-            <button
-              key={kind}
-              type="button"
-              disabled={!scaleMetersPerSvgUnit}
-              onClick={() => toggleArmedKind(kind)}
-              className={toolButtonClass(tool === "safety" && armedKind === kind)}
-            >
-              ● {label}
-            </button>
-          ))}
+              ))
+            }
+          </ToolbarGroupMenu>
+          <ToolbarGroupMenu
+            label="Safety"
+            active={tool === "safety"}
+            disabled={!scaleMetersPerSvgUnit}
+            buttonClassName={toolButtonClass}
+          >
+            {(close) =>
+              SAFETY_KINDS.map(({ kind, label }) => (
+                <button
+                  key={kind}
+                  type="button"
+                  disabled={!scaleMetersPerSvgUnit}
+                  onClick={() => {
+                    toggleArmedKind(kind);
+                    close();
+                  }}
+                  className={`${toolButtonClass(tool === "safety" && armedKind === kind)} w-full text-left`}
+                >
+                  ● {label}
+                </button>
+              ))
+            }
+          </ToolbarGroupMenu>
           <span className="mx-1 text-[var(--color-grid)]">|</span>
           <button
             type="button"
@@ -2561,6 +2594,49 @@ function RulerOverlay({
           style={{ width: stepPx }}
         />
       </div>
+    </div>
+  );
+}
+
+/**
+ * A single toolbar entry that reveals a group of related actions on click —
+ * keeps the top strip shallow (strip -> group -> item, 2 clicks to any
+ * grouped action) instead of one button per item.
+ */
+function ToolbarGroupMenu({
+  label,
+  active,
+  disabled,
+  buttonClassName,
+  children,
+}: {
+  label: string;
+  active: boolean;
+  disabled?: boolean;
+  buttonClassName: (active: boolean) => string;
+  children: (close: () => void) => ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => setOpen((v) => !v)}
+        // Above the backdrop (z-30) so re-clicking the trigger toggles the
+        // menu closed instead of the backdrop swallowing the click.
+        className={`relative z-40 ${buttonClassName(active || open)}`}
+      >
+        {label} ▾
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
+          <div className="absolute left-0 top-full z-40 mt-1 flex flex-col items-start gap-1 rounded-sm border border-[var(--color-grid)] bg-[var(--color-panel)] p-2 whitespace-nowrap shadow-sm">
+            {children(() => setOpen(false))}
+          </div>
+        </>
+      )}
     </div>
   );
 }
