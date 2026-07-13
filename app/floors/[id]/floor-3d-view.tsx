@@ -5,11 +5,35 @@ import { Canvas } from "@react-three/fiber";
 import { Line, OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
 import { FloorPicker, type FloorPickerFloor } from "@/app/components/floor-picker";
+import { EXIT_GREEN } from "@/lib/color-palette";
 import { itemKey, type ItemRef } from "./layer-panel";
 
 // Same hue as the 2D canvas SELECTION_COLOR so the Issue-subject highlight
 // reads identically across views.
 const HIGHLIGHT_EMISSIVE = "#2563eb";
+
+// Baked once and cached: a green rect with white "EXIT" text, used as a
+// texture for the Exit marker plane. A plain canvas texture avoids pulling
+// in a 3D text-rendering font loader for a single static label.
+let exitTexture: THREE.CanvasTexture | null = null;
+function getExitTexture(): THREE.CanvasTexture {
+  if (exitTexture) return exitTexture;
+  const canvas = document.createElement("canvas");
+  canvas.width = 256;
+  canvas.height = 128;
+  const ctx = canvas.getContext("2d");
+  if (ctx) {
+    ctx.fillStyle = EXIT_GREEN;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "bold 60px system-ui, sans-serif";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText("EXIT", canvas.width / 2, canvas.height / 2 + 2);
+  }
+  exitTexture = new THREE.CanvasTexture(canvas);
+  return exitTexture;
+}
 
 type Point = { x: number; y: number };
 
@@ -179,22 +203,39 @@ export function Floor3DView({
             </mesh>
           ))}
 
-          {visibleSafety.map((s) => (
-            <mesh key={s.id} position={[s.xMeters, 0.02, s.yMeters]} rotation={[-Math.PI / 2, 0, 0]}>
-              <circleGeometry args={[Math.max(maxSpan / 60, 0.1), 20]} />
-              <meshStandardMaterial
-                color="#e2572b"
-                emissive={
-                  highlightKey === itemKey({ type: "safety_equipment", id: s.id })
-                    ? HIGHLIGHT_EMISSIVE
-                    : "#000000"
-                }
-                emissiveIntensity={
-                  highlightKey === itemKey({ type: "safety_equipment", id: s.id }) ? 0.5 : 0
-                }
-              />
-            </mesh>
-          ))}
+          {visibleSafety.map((s) => {
+            const highlighted = highlightKey === itemKey({ type: "safety_equipment", id: s.id });
+            if (s.kind === "exit") {
+              // Texture is 256x128 (2:1) — keep the plane's aspect matching.
+              const width = Math.max(maxSpan / 22, 0.6);
+              const height = width / 2;
+              return (
+                <mesh
+                  key={s.id}
+                  position={[s.xMeters, 0.02, s.yMeters]}
+                  rotation={[-Math.PI / 2, 0, 0]}
+                >
+                  <planeGeometry args={[width, height]} />
+                  <meshStandardMaterial
+                    map={getExitTexture()}
+                    emissive={highlighted ? HIGHLIGHT_EMISSIVE : "#000000"}
+                    emissiveIntensity={highlighted ? 0.5 : 0}
+                    side={THREE.DoubleSide}
+                  />
+                </mesh>
+              );
+            }
+            return (
+              <mesh key={s.id} position={[s.xMeters, 0.02, s.yMeters]} rotation={[-Math.PI / 2, 0, 0]}>
+                <circleGeometry args={[Math.max(maxSpan / 60, 0.1), 20]} />
+                <meshStandardMaterial
+                  color="#e2572b"
+                  emissive={highlighted ? HIGHLIGHT_EMISSIVE : "#000000"}
+                  emissiveIntensity={highlighted ? 0.5 : 0}
+                />
+              </mesh>
+            );
+          })}
 
           {routeLinePoints && (
             <Line
