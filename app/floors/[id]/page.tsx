@@ -5,8 +5,7 @@ import { db } from "@/db/client";
 import { floors, facilities, equipmentTypes } from "@/db/schema";
 import { wktPolygonToPoints } from "@/lib/wkt";
 import type { AreaKind } from "./actions";
-import { FloorViewSwitcher } from "./floor-view-switcher";
-import { IssuesPanel } from "./issues-panel";
+import { FloorWorkspace } from "./floor-workspace";
 
 const VIEWBOX_RE = /viewBox="0 0 ([\d.]+) ([\d.]+)"/;
 
@@ -40,6 +39,7 @@ type SafetyEquipmentRow = {
 type IssueRow = {
   id: string;
   subjectType: string;
+  subjectId: string;
   subjectLabel: string;
   reporterName: string;
   description: string;
@@ -123,26 +123,27 @@ export default async function FloorPage({
         WHERE floor_id = ${id}
       `),
       db.execute<IssueRow>(sql`
-        SELECT i.id, i.subject_type as "subjectType", r.name as "subjectLabel",
+        SELECT i.id, i.subject_type as "subjectType", i.subject_id as "subjectId",
+               r.name as "subjectLabel",
                i.reporter_name as "reporterName", i.description, i.department, i.status,
                i.created_at as "createdAt"
         FROM issues i JOIN rooms r ON i.subject_type = 'room' AND i.subject_id = r.id
         WHERE r.floor_id = ${id}
         UNION ALL
-        SELECT i.id, i.subject_type, a.name, i.reporter_name, i.description, i.department,
-               i.status, i.created_at
+        SELECT i.id, i.subject_type, i.subject_id, a.name, i.reporter_name, i.description,
+               i.department, i.status, i.created_at
         FROM issues i JOIN areas a ON i.subject_type = 'area' AND i.subject_id = a.id
         WHERE a.floor_id = ${id}
         UNION ALL
-        SELECT i.id, i.subject_type, t.name, i.reporter_name, i.description, i.department,
-               i.status, i.created_at
+        SELECT i.id, i.subject_type, i.subject_id, t.name, i.reporter_name, i.description,
+               i.department, i.status, i.created_at
         FROM issues i
         JOIN equipment e ON i.subject_type = 'equipment' AND i.subject_id = e.id
         JOIN equipment_types t ON t.id = e.equipment_type_id
         WHERE e.floor_id = ${id}
         UNION ALL
-        SELECT i.id, i.subject_type, s.kind::text, i.reporter_name, i.description, i.department,
-               i.status, i.created_at
+        SELECT i.id, i.subject_type, i.subject_id, s.kind::text, i.reporter_name, i.description,
+               i.department, i.status, i.created_at
         FROM issues i JOIN safety_equipment s ON i.subject_type = 'safety_equipment' AND i.subject_id = s.id
         WHERE s.floor_id = ${id}
         ORDER BY "createdAt" DESC
@@ -210,27 +211,25 @@ export default async function FloorPage({
 
       <div className="flex min-h-[calc(100vh-57px)] flex-col items-center gap-8 px-6 py-10">
         {row.floorPlanSvg ? (
-          <>
-            <FloorViewSwitcher
-              floorId={row.floorId}
-              floorName={row.floorName}
-              floors={siblingFloors}
-              svgMarkup={row.floorPlanSvg}
-              viewBoxWidth={viewBoxWidth}
-              viewBoxHeight={viewBoxHeight}
-              scaleMetersPerSvgUnit={row.scaleMetersPerSvgUnit}
-              floorWidthM={floorWidthM}
-              floorHeightM={floorHeightM}
-              equipmentTypes={allEquipmentTypes}
-              placedEquipment={placedEquipment}
-              rooms={rooms}
-              areas={areas}
-              safetyEquipment={safetyEquipment}
-              routeWaypoints={parsedRoute?.waypoints ?? null}
-              routePpeAreas={parsedRoute?.ppeAreas ?? []}
-            />
-            <IssuesPanel floorId={row.floorId} issues={issueRows} />
-          </>
+          <FloorWorkspace
+            floorId={row.floorId}
+            floorName={row.floorName}
+            floors={siblingFloors}
+            svgMarkup={row.floorPlanSvg}
+            viewBoxWidth={viewBoxWidth}
+            viewBoxHeight={viewBoxHeight}
+            scaleMetersPerSvgUnit={row.scaleMetersPerSvgUnit}
+            floorWidthM={floorWidthM}
+            floorHeightM={floorHeightM}
+            equipmentTypes={allEquipmentTypes}
+            placedEquipment={placedEquipment}
+            rooms={rooms}
+            areas={areas}
+            safetyEquipment={safetyEquipment}
+            routeWaypoints={parsedRoute?.waypoints ?? null}
+            routePpeAreas={parsedRoute?.ppeAreas ?? []}
+            issues={issueRows}
+          />
         ) : (
           <p className="text-sm text-[var(--color-ink-soft)]">
             This Floor has no Floor Plan yet.
