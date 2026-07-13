@@ -53,6 +53,18 @@ export function normalizeRotation90(deg: number): 0 | 90 | 180 | 270 {
   return ((((snapped % 360) + 360) % 360) as 0 | 90 | 180 | 270);
 }
 
+export type RotationDirection = "cw" | "ccw";
+
+/**
+ * Steps `current` by one 90° increment in `direction`, snapping to
+ * {0, 90, 180, 270}. Increasing rotationDeg is a clockwise turn on screen
+ * (this module's rotation formula matches SVG rotate()'s direction on a
+ * y-down canvas — see the file header), so "cw" adds 90 and "ccw" subtracts.
+ */
+export function rotate90(current: number, direction: RotationDirection): 0 | 90 | 180 | 270 {
+  return normalizeRotation90(current + (direction === "cw" ? 90 : -90));
+}
+
 /**
  * SVG `transform` value for an <rect> drawn unrotated at its top-left
  * (x - widthM/2, y - depthM/2): SVG's rotate() matches this module's rotation

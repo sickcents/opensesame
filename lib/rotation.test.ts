@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   normalizeRotation90,
+  rotate90,
   rotatedRectCorners,
   svgRotateTransform,
   type MeterPoint,
@@ -81,6 +82,26 @@ describe("normalizeRotation90", () => {
     expect(normalizeRotation90(45)).toBe(90);
     expect(normalizeRotation90(135)).toBe(180);
     expect(normalizeRotation90(269)).toBe(270);
+  });
+});
+
+describe("rotate90", () => {
+  it("steps clockwise by adding 90", () => {
+    expect(rotate90(0, "cw")).toBe(90);
+    expect(rotate90(90, "cw")).toBe(180);
+    expect(rotate90(180, "cw")).toBe(270);
+    expect(rotate90(270, "cw")).toBe(0);
+  });
+
+  it("steps counter-clockwise by subtracting 90", () => {
+    expect(rotate90(0, "ccw")).toBe(270);
+    expect(rotate90(270, "ccw")).toBe(180);
+    expect(rotate90(180, "ccw")).toBe(90);
+    expect(rotate90(90, "ccw")).toBe(0);
+  });
+
+  it("cw then ccw returns to the starting rotation", () => {
+    expect(rotate90(rotate90(45, "cw"), "ccw")).toBe(normalizeRotation90(45));
   });
 });
 

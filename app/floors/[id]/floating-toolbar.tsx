@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { normalizeRotation90 } from "@/lib/rotation";
+import { ArrowClockwiseIcon, ArrowCounterClockwiseIcon } from "@phosphor-icons/react";
+import { rotate90, type RotationDirection } from "@/lib/rotation";
 import { deleteItem, renameItem, rotateEquipment } from "./actions";
 import { ColorPickerPopover } from "./color-picker-popover";
 
@@ -48,10 +49,10 @@ export function FloatingToolbar({
     onError(err instanceof Error ? err.message : fallback);
   }
 
-  function rotate() {
+  function rotate(direction: RotationDirection) {
     if (!single || single.type !== "equipment") return;
     const item = single;
-    const next = normalizeRotation90((item.rotationDeg ?? 0) + 90);
+    const next = rotate90(item.rotationDeg ?? 0, direction);
     startTransition(async () => {
       try {
         await rotateEquipment(floorId, item.id, next);
@@ -117,9 +118,28 @@ export function FloatingToolbar({
       )}
 
       {single?.type === "equipment" && (
-        <button type="button" disabled={isPending} onClick={rotate} className={BTN}>
-          Rotate 90°
-        </button>
+        <>
+          <button
+            type="button"
+            disabled={isPending}
+            onClick={() => rotate("ccw")}
+            title="Rotate 90° counter-clockwise (Shift+R)"
+            aria-label="Rotate counter-clockwise"
+            className={BTN}
+          >
+            <ArrowCounterClockwiseIcon size={14} weight="bold" />
+          </button>
+          <button
+            type="button"
+            disabled={isPending}
+            onClick={() => rotate("cw")}
+            title="Rotate 90° clockwise (R)"
+            aria-label="Rotate clockwise"
+            className={BTN}
+          >
+            <ArrowClockwiseIcon size={14} weight="bold" />
+          </button>
+        </>
       )}
       {single && single.type !== "safety_equipment" && (
         <span className="relative">
