@@ -2,8 +2,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   parseOsmWayId,
   buildOverpassQuery,
+  buildNearestBuildingQuery,
   overpassWayToPolygon,
   fetchOsmWayOutline,
+  fetchNearestBuildingWay,
 } from "./osm";
 
 const validResponse = {
@@ -41,6 +43,29 @@ describe("parseOsmWayId", () => {
     expect(parseOsmWayId("https://www.openstreetmap.org/node/42")).toBeNull();
     expect(parseOsmWayId("")).toBeNull();
   });
+
+  it("extracts the way ID regardless of the www. prefix", () => {
+    expect(parseOsmWayId("https://openstreetmap.org/way/198458289")).toBe("198458289");
+    expect(parseOsmWayId("http://www.openstreetmap.org/way/198458289")).toBe("198458289");
+  });
+
+  it("extracts the way ID with a trailing query string", () => {
+    expect(
+      parseOsmWayId("https://www.openstreetmap.org/way/198458289?utm_source=share"),
+    ).toBe("198458289");
+  });
+
+  it("extracts the way ID with a trailing map-view fragment", () => {
+    expect(
+      parseOsmWayId("https://www.openstreetmap.org/way/198458289#map=18/51.0/4.0"),
+    ).toBe("198458289");
+  });
+
+  it("extracts the way ID when surrounded by other pasted text", () => {
+    expect(
+      parseOsmWayId("see https://www.openstreetmap.org/way/198458289 for the outline"),
+    ).toBe("198458289");
+  });
 });
 
 describe("buildOverpassQuery", () => {
@@ -49,6 +74,20 @@ describe("buildOverpassQuery", () => {
     expect(query).toContain("[out:json]");
     expect(query).toContain("way(198458289)");
     expect(query).toContain("out geom");
+  });
+});
+
+describe("buildNearestBuildingQuery", () => {
+  it("requests building ways within a radius of the point", () => {
+    const query = buildNearestBuildingQuery(51.0, 4.0);
+    expect(query).toContain("[out:json]");
+    expect(query).toContain("way(around:50,51,4)");
+    expect(query).toContain('["building"]');
+    expect(query).toContain("out geom");
+  });
+
+  it("accepts a custom radius", () => {
+    expect(buildNearestBuildingQuery(51.0, 4.0, 100)).toContain("around:100,51,4");
   });
 });
 
@@ -159,5 +198,59 @@ describe("fetchOsmWayOutline", () => {
       }),
     );
     await expect(fetchOsmWayOutline("198458289")).rejects.toThrow(/unreadable/);
+  });
+});
+
+describe("fetchNearestBuildingWay", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("returns null when no building way is found nearby", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ ok: true, json: async () => ({ elements: [] }) }),
+    );
+    await expect(fetchNearestBuildingWay(51.0, 4.0)).resolves.toBeNull();
+  });
+
+  it("picks the way whose centroid is closest to the clicked point", async () => {
+    const near = {
+      type: "way",
+      id: 111,
+      geometry: [
+        { lat: 51.0, lon: 4.0 },
+        { lat: 51.0, lon: 4.001 },
+        { lat: 51.001, lon: 4.001 },
+        { lat: 51.001, lon: 4.0 },
+      ],
+    };
+    const far = {
+      type: "way",
+      id: 222,
+      geometry: [
+        { lat: 52.0, lon: 5.0 },
+        { lat: 52.0, lon: 5.001 },
+        { lat: 52.001, lon: 5.001 },
+        { lat: 52.001, lon: 5.0 },
+      ],
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ ok: true, json: async () => ({ elements: [far, near] }) }),
+    );
+
+    const result = await fetchNearestBuildingWay(51.0002, 4.0005);
+
+    expect(result?.wayId).toBe("111");
+    expect(result?.outline.type).toBe("Polygon");
+  });
+
+  it("throws a clear error when the Overpass API responds with an error status", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue({ ok: false, status: 504, text: async () => "" }),
+    );
+    await expect(fetchNearestBuildingWay(51.0, 4.0)).rejects.toThrow(/Overpass/);
   });
 });

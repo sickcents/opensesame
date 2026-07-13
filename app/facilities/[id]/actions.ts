@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 import { db } from "@/db/client";
 import { facilities } from "@/db/schema";
-import { parseOsmWayId, fetchOsmWayOutline } from "@/lib/osm";
+import { parseOsmWayId, fetchOsmWayOutline, fetchNearestBuildingWay } from "@/lib/osm";
 
 export async function setGeoAnchor(
   facilityId: string,
@@ -52,6 +52,15 @@ export async function setOsmReference(facilityId: string, osmWayId: string) {
   revalidatePath(`/facilities/${facilityId}`);
 
   return { wayId };
+}
+
+/**
+ * Looks up the nearest OSM building way to a clicked map point, for preview
+ * before attaching it. Returns null (not a thrown error) when no building
+ * is within range — that's an expected outcome, not a failure.
+ */
+export async function findNearestOsmWay(lat: number, lng: number) {
+  return fetchNearestBuildingWay(lat, lng);
 }
 
 export async function setOccupiedPortion(facilityId: string, geojson: object) {
